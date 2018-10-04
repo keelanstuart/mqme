@@ -32,6 +32,7 @@
 
 #include "StdAfx.h"
 
+#include <Windows.h>
 #include <mqme.h>
 #include <winsock2.h>
 #include <ObjBase.h>

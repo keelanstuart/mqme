@@ -171,12 +171,12 @@ FOURCHARCODE CPacket::GetID()
 
 uint32_t CPacket::GetHeaderLength()
 {
-	size_t ret = 0;
+	uint32_t ret = 0;
 
 	SPacketHeader *h = (SPacketHeader *)m_Buffer;
 	if (h)
 	{
-		ret = sizeof(SPacketHeader);
+		ret = (uint32_t)sizeof(SPacketHeader);
 	}
 
 	return ret;

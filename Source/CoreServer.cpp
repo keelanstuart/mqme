@@ -35,6 +35,7 @@
 #include <mqme.h>
 #include <winsock2.h>
 #include <ObjBase.h>
+#include <set>
 
 #include "Packet.h"
 #include "PacketQueue.h"
@@ -42,6 +43,64 @@
 
 extern CThreadPool *g_ThreadPool;
 extern bool g_Initialized;
+
+
+// In order to make TGUIDSet work, a Compare must be provided
+struct GUIDComparer
+{
+	bool operator()(const GUID &a, const GUID &b) const
+	{
+		return (memcmp(&a, &b, sizeof(GUID)) < 0) ? true : false;
+	}
+};
+
+typedef std::set< GUID, GUIDComparer > TGUIDSet;
+
+class CGUIDSet : public IGUIDSet
+{
+public:
+	CGUIDSet()
+	{
+	}
+
+	virtual void Add(GUID id)
+	{
+		m_GUIDSet.insert(id);
+	}
+
+	virtual void Remove(GUID id)
+	{
+		m_GUIDSet.erase(m_GUIDSet.find(id));
+	}
+
+	virtual bool Contains(GUID id)
+	{
+		return (m_GUIDSet.find(id) == m_GUIDSet.end()) ? false : true;
+	}
+
+	virtual size_t Size()
+	{
+		return m_GUIDSet.size();
+	}
+
+	virtual bool Empty()
+	{
+		return m_GUIDSet.empty();
+	}
+
+	virtual void ForEach(EachGUIDFunc func, LPVOID userdata1, LPVOID userdata2)
+	{
+		if (!func)
+			return;
+
+		for (TGUIDSet::const_iterator it = m_GUIDSet.begin(); it != m_GUIDSet.end(); it++)
+		{
+			func(*it, userdata1, userdata2);
+		}
+	}
+
+	TGUIDSet m_GUIDSet;
+};
 
 class CCoreServer: public mqme::ICoreServer
 {
@@ -99,8 +158,8 @@ protected:
 
 	TEventHandlerMap m_EventHandlerMap;
 
-	typedef std::map< GUID, TGUIDSet, GUIDComparer > TGUIDSetMap;
-	typedef std::pair< GUID, TGUIDSet > TGUIDSetPair;
+	typedef std::map< GUID, CGUIDSet, GUIDComparer > TGUIDSetMap;
+	typedef std::pair< GUID, CGUIDSet > TGUIDSetPair;
 
 	TGUIDSetMap m_RoutingTable;
 	CRITICAL_SECTION m_RoutingLock;
@@ -209,51 +268,33 @@ public:
 	{
 		bool ret = true;
 
-#if 0
-		EnterCriticalSection(&m_ConnectionLock);
-#endif
 		TConnectionMap::const_iterator cit = m_ConnectionMap.find(listener);
 		if (cit == m_ConnectionMap.end())
 			ret = false;
-#if 0
-		LeaveCriticalSection(&m_ConnectionLock);
-#endif
 
 		if (ret)
 		{
-#if 0
-			EnterCriticalSection(&m_ListeningLock);
-#endif
 			TGUIDSetMap::iterator lit = m_ListeningTable.find(listener);
 			if (lit == m_ListeningTable.end())
 			{
-				std::pair<TGUIDSetMap::iterator, bool> insres = m_ListeningTable.insert(TGUIDSetPair(listener, TGUIDSet()));
+				std::pair<TGUIDSetMap::iterator, bool> insres = m_ListeningTable.insert(TGUIDSetPair(listener, CGUIDSet()));
 				if (insres.second)
 					lit = insres.first;
 			}
 
 			if (lit != m_ListeningTable.end())
-				lit->second.insert(channel);
-#if 0
-			LeaveCriticalSection(&m_ListeningLock);
-#endif
+				lit->second.Add(channel);
 
-#if 0
-			EnterCriticalSection(&m_RoutingLock);
-#endif
 			TGUIDSetMap::iterator rit = m_RoutingTable.find(channel);
 			if (rit == m_RoutingTable.end())
 			{
-				std::pair<TGUIDSetMap::iterator, bool> insres = m_RoutingTable.insert(TGUIDSetPair(channel, TGUIDSet()));
+				std::pair<TGUIDSetMap::iterator, bool> insres = m_RoutingTable.insert(TGUIDSetPair(channel, CGUIDSet()));
 				if (insres.second)
 					rit = insres.first;
 			}
 
 			if (rit != m_RoutingTable.end())
-				rit->second.insert(listener);
-#if 0
-			LeaveCriticalSection(&m_ListeningLock);
-#endif
+				rit->second.Add(listener);
 		}
 
 		return ret;
@@ -261,51 +302,33 @@ public:
 
 	virtual void RemoveListenerFromChannel(GUID channel, GUID listener)
 	{
-#if 0
-		EnterCriticalSection(&m_ListeningLock);
-#endif
 		TGUIDSetMap::iterator lit = m_ListeningTable.find(listener);
 		if (lit != m_ListeningTable.end())
 		{
-			lit->second.erase(lit->second.find(channel));
-			if (lit->second.empty())
+			lit->second.Remove(channel);
+			if (lit->second.Empty())
 				m_ListeningTable.erase(lit);
 		}
-#if 0
-		LeaveCriticalSection(&m_ListeningLock);
-#endif
 
-#if 0
-		EnterCriticalSection(&m_RoutingLock);
-#endif
 		TGUIDSetMap::iterator rit = m_RoutingTable.find(channel);
 		if (rit != m_RoutingTable.end())
 		{
-			rit->second.erase(rit->second.find(listener));
-			if (rit->second.empty())
+			rit->second.Remove(listener);
+			if (rit->second.Empty())
 				m_RoutingTable.erase(rit);
 		}
-#if 0
-		LeaveCriticalSection(&m_RoutingLock);
-#endif
 	}
 
-	virtual bool GetListeners(GUID channel, TGUIDSet &listeners)
+	virtual bool GetListeners(GUID channel, IGUIDSet **listeners)
 	{
 		bool ret = false;
 
-#if 0
-		EnterCriticalSection(&m_ConnectionLock);
-#endif
 		TGUIDSetMap::iterator rit = m_RoutingTable.find(channel);
 		if (rit != m_RoutingTable.end())
 		{
-			listeners = rit->second;
+			*listeners = &(rit->second);
 			ret = true;
 		}
-#if 0
-		LeaveCriticalSection(&m_ConnectionLock);
-#endif
 
 		return false;
 	}
@@ -402,30 +425,18 @@ private:
 							cinf.ev = WSACreateEvent();
 							WSAEventSelect(client_socket, cinf.ev, FD_CLOSE | FD_READ);
 
-#if 0
-							EnterCriticalSection(&_this->m_ConnectionLock);
-							EnterCriticalSection(&_this->m_RoutingLock);
-							EnterCriticalSection(&_this->m_ListeningLock);
-#endif
-
 							_this->m_ConnectionMap.insert(TConnectionPair(client_guid, cinf));
 
-							std::pair<TGUIDSetMap::iterator, bool> rins = _this->m_RoutingTable.insert(TGUIDSetPair(client_guid, TGUIDSet()));
-							rins.first->second.insert(client_guid);
+							std::pair<TGUIDSetMap::iterator, bool> rins = _this->m_RoutingTable.insert(TGUIDSetPair(client_guid, CGUIDSet()));
+							rins.first->second.Add(client_guid);
 
-							std::pair<TGUIDSetMap::iterator, bool> lins = _this->m_ListeningTable.insert(TGUIDSetPair(client_guid, TGUIDSet()));
-							lins.first->second.insert(client_guid);
+							std::pair<TGUIDSetMap::iterator, bool> lins = _this->m_ListeningTable.insert(TGUIDSetPair(client_guid, CGUIDSet()));
+							lins.first->second.Add(client_guid);
 
 							// if we have a registered packet handler, then schedule it to run
 							TEventHandlerMap::iterator peit = _this->m_EventHandlerMap.find(ICoreServer::ET_CONNECT);
 							if (peit != _this->m_EventHandlerMap.end())
 								peit->second.func(_this, ICoreServer::ET_CONNECT, client_guid, peit->second.userdata);
-
-#if 0
-							LeaveCriticalSection(&_this->m_ListeningLock);
-							LeaveCriticalSection(&_this->m_RoutingLock);
-							LeaveCriticalSection(&_this->m_ConnectionLock);
-#endif
 						}
 					}
 					else if (ne.lNetworkEvents & FD_CLOSE)
@@ -483,17 +494,11 @@ private:
 				continue;
 			}
 
-#if 0
-			EnterCriticalSection(&_this->m_ConnectionLock);
-#endif
 			if (it == _this->m_ConnectionMap.end())
 				it = _this->m_ConnectionMap.begin();
 
 			HANDLE event = it->second.ev;
 			SOCKET sock = it->second.sock;
-#if 0
-			LeaveCriticalSection(&_this->m_ConnectionLock);
-#endif
 
 			waitret = WSAWaitForMultipleEvents(1, &event, false, 0, true);
 			if (waitret == WSA_WAIT_TIMEOUT)
@@ -547,11 +552,11 @@ private:
 								TGUIDSetMap::iterator rit = _this->m_RoutingTable.find(pkthdr.m_Context);
 								if (rit != _this->m_RoutingTable.end())
 								{
-									size_t num_listeners = rit->second.size();
+									size_t num_listeners = rit->second.Size();
 
 									// want to make sure that there's at least one client to route to,
 									// but also that we're not re-transmitting to a single client - the sender
-									if ((num_listeners > 1) || (rit->second.find(ppkt->GetSender()) == rit->second.end()))
+									if ((num_listeners > 1) || (!rit->second.Contains(ppkt->GetSender())))
 									{
 										// increment the ref count if we re-transmit to other listeners
 										ppkt->IncRef();
@@ -582,23 +587,15 @@ private:
 				}
 				else if (ne.lNetworkEvents & FD_CLOSE)
 				{
-#if 0
-					EnterCriticalSection(&_this->m_ConnectionLock);
-					EnterCriticalSection(&_this->m_ListeningLock);
-					EnterCriticalSection(&_this->m_RoutingLock);
-#endif
-
 					// find all the channels that this connection is listening to and remove it
 					// from the routing table
 					TGUIDSetMap::iterator lit = _this->m_ListeningTable.find(it->first);
 					if (lit != _this->m_ListeningTable.end())
 					{
-						for (TGUIDSet::iterator elit = lit->second.begin(), last_elit = lit->second.end(); elit != last_elit; elit++)
+						for (TGUIDSet::iterator elit = lit->second.m_GUIDSet.begin(), last_elit = lit->second.m_GUIDSet.end(); elit != last_elit; elit++)
 						{
 							TGUIDSetMap::iterator rit = _this->m_RoutingTable.find(*elit);
-							TGUIDSet::iterator erit = rit->second.find(it->first);
-							if (erit != rit->second.end())
-								rit->second.erase(erit);
+							rit->second.Remove(it->first);
 						}
 
 						_this->m_ListeningTable.erase(lit);
@@ -613,12 +610,6 @@ private:
 						peit->second.func(_this, ICoreServer::ET_DISCONNECT, it->first, peit->second.userdata);
 
 					it = _this->m_ConnectionMap.erase(it);
-
-#if 0
-					LeaveCriticalSection(&_this->m_RoutingLock);
-					LeaveCriticalSection(&_this->m_ListeningLock);
-					LeaveCriticalSection(&_this->m_ConnectionLock);
-#endif
 
 					continue;
 				}
@@ -648,10 +639,6 @@ private:
 			CPacket *ppkt = _this->m_Outgoing.Deque();
 			if (ppkt)
 			{
-#if 0
-				EnterCriticalSection(&_this->m_RoutingLock);
-#endif
-
 				// search the routing table for the channel given in the packet
 				TGUIDSetMap::iterator cit = _this->m_RoutingTable.find(ppkt->GetHeader()->m_Context);
 				if (cit != _this->m_RoutingTable.end())
@@ -665,14 +652,10 @@ private:
 					buf[1].len = ppkt->GetDataLength();
 
 					// send the packet to each listener
-					for (TGUIDSet::iterator git = cit->second.begin(), last_git = cit->second.end(); git != last_git; git++)
+					for (TGUIDSet::iterator git = cit->second.m_GUIDSet.begin(), last_git = cit->second.m_GUIDSet.end(); git != last_git; git++)
 					{
 						if (*git == ppkt->GetSender())
 							continue;
-
-#if 0
-						EnterCriticalSection(&_this->m_ConnectionLock);
-#endif
 
 						// get the socket for the listener's GUID
 						TConnectionMap::iterator sit = _this->m_ConnectionMap.find(*git);
@@ -693,16 +676,8 @@ private:
 								}
 							}
 						}
-
-#if 0
-						LeaveCriticalSection(&_this->m_ConnectionLock);
-#endif
 					}
 				}
-
-#if 0
-				LeaveCriticalSection(&_this->m_RoutingLock);
-#endif
 
 				ppkt->Release();
 			}
