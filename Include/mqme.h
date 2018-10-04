@@ -32,9 +32,8 @@
 
 #pragma once
 
-
-#include <windows.h>
-#include <set>
+#include <stdint.h>
+#include <guiddef.h>
 
 
 #ifdef MQME_EXPORTS
@@ -42,6 +41,7 @@
 #else
 #define MQME_API __declspec(dllimport)
 #endif
+
 
 namespace mqme
 {
@@ -108,16 +108,32 @@ public:
 };
 
 
-// In order to make TGUIDSet work, a Compare must be provided
-struct GUIDComparer
+// IGUIDSet is a set of GUIDs that is used for routing packets appropriately. An instance of
+// ICoreServer will maintain listener data per-channel and it can be modified with this interface.
+class IGUIDSet
 {
-	bool operator()(const GUID &a, const GUID &b) const
-	{
-		return (memcmp(&a, &b, sizeof(GUID)) < 0) ? true : false;
-	}
-};
+public:
+	// Adds the given GUID to the set
+	virtual void Add(GUID id) = NULL;
 
-typedef std::set< GUID, GUIDComparer > TGUIDSet;
+	// Removes the given GUID from the set
+	virtual void Remove(GUID id) = NULL;
+
+	// Returns true if the set contains the given GUID, false if it does not.
+	virtual bool Contains(GUID id) = NULL;
+
+	// Returns the number of elements in the set
+	virtual size_t Size() = NULL;
+
+	// Returns true if the set if empty, false if there is anything in it
+	virtual bool Empty() = NULL;
+
+	// A parameter to the ForEach function; will be called for each GUID in the set
+	typedef void(*EachGUIDFunc)(GUID id, LPVOID userdata1, LPVOID userdata2);
+
+	// Calls the given user-defined function back for each GUID in the set. Passes it userdata1 and userdata2
+	virtual void ForEach(EachGUIDFunc func, LPVOID userdata1 = nullptr, LPVOID userdata2 = nullptr) = NULL;
+};
 
 
 // ICoreServer interface -- listens for incoming ICoreClient connections over TCP and
@@ -180,7 +196,7 @@ public:
 	virtual void RemoveListenerFromChannel(GUID channel, GUID listener) = NULL;
 
 	// Populates a set with the current listeners on a given channel
-	virtual bool GetListeners(GUID channel, TGUIDSet &listeners) = NULL;
+	virtual bool GetListeners(GUID channel, IGUIDSet **listeners) = NULL;
 
 	// Registers an incoming packet handling callback with the server.
 	// When a packet with the given id arrives, this callback
@@ -267,7 +283,7 @@ public:
 
 	enum PROPERTY_TYPE
 	{
-		PT_NONE = NULL,		// uninitialized
+		PT_NONE = 0,		// uninitialized
 
 		PT_STRING,
 		PT_INT,
@@ -282,11 +298,10 @@ public:
 	// sliders, file browse buttons, color pickers, and more.
 	enum PROPERTY_ASPECT
 	{
-		PA_GENERIC = NULL,
+		PA_GENERIC = 0,
 
 		PA_FILENAME,		// STRING
 		PA_BOOLEAN,			// INT - 0 | 1
-		PA_LATLON,			// lattitude / longitude
 
 		PA_NUMASPECTS
 	};
@@ -296,7 +311,7 @@ public:
 	{
 		// stores...
 
-		SM_BIN_VALUESONLY = NULL,	// (binary format) id, type, value
+		SM_BIN_VALUESONLY = 0,	// (binary format) id, type, value
 		SM_BIN_TERSE,			// (binary format) id, type, aspect, value
 		SM_BIN_VERBOSE,			// (binary format) name, id, type, aspect, value
 
@@ -381,6 +396,9 @@ public:
 	// store the property set will be placed at amountused
 	virtual bool Serialize(IProperty::SERIALIZE_MODE mode, BYTE *buf, size_t bufsize, size_t *amountused = NULL) const = NULL;
 
+	// Creates an instance of the IPropertySet interface, allowing the user to add IProperty's to it
+	// These can be serialized to a packet and distributed to a set of listeners. Imagination is the only limitation.
+	// (Only included as an example, use or not, with discretion)
 	MQME_API static IPropertySet *CreatePropertySet();
 };
 
