@@ -129,10 +129,10 @@ public:
 	virtual bool Empty() = NULL;
 
 	// A parameter to the ForEach function; will be called for each GUID in the set
-	typedef void(*EachGUIDFunc)(GUID id, LPVOID userdata1, LPVOID userdata2);
+	typedef void(*EachGUIDFunc)(GUID id, void *userdata1, void *userdata2);
 
 	// Calls the given user-defined function back for each GUID in the set. Passes it userdata1 and userdata2
-	virtual void ForEach(EachGUIDFunc func, LPVOID userdata1 = nullptr, LPVOID userdata2 = nullptr) = NULL;
+	virtual void ForEach(EachGUIDFunc func, void *userdata1 = nullptr, void *userdata2 = nullptr) = NULL;
 };
 
 
