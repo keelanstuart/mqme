@@ -33,6 +33,8 @@
 #pragma once
 
 
+#include <thread>
+
 class CThreadPool
 {
 public:
@@ -57,16 +59,16 @@ protected:
 
 	struct STaskInfo
 	{
-		STaskInfo(TASK_CALLBACK task, LPVOID param0, LPVOID param1, LPVOID param2, UINT *pactionref);
+		STaskInfo(TASK_CALLBACK task, LPVOID param0, LPVOID param1, LPVOID param2, size_t *pactionref);
 
 		// The function that the thread should be running
 		TASK_CALLBACK m_Task;
 
 		// The parameter given to the thread function
-		LPVOID m_Param[3];
+		void *m_Param[3];
 
 		// This is the number of active tasks, used for blocking
-		UINT *m_pActionRef;
+		size_t *m_pActionRef;
 	};
 
 	typedef std::deque<STaskInfo> TTaskList;
@@ -78,14 +80,11 @@ protected:
 	bool GetNextTask(STaskInfo &task);
 
 	void WorkerThreadProc();
-	static DWORD WINAPI _WorkerThreadProc(LPVOID param);
-
-	// the number of threads in the pool
-	UINT m_nThreads;
+	static void _WorkerThreadProc(CThreadPool *param);
 
 	// the actual thread handles... keep them separated from SThreadInfo
 	// so we can wait on them.
-	HANDLE *m_hThreads;
+	std::vector<std::thread> m_hThreads;
 
 	enum
 	{

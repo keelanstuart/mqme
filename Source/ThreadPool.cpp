@@ -41,23 +41,20 @@ CThreadPool::CThreadPool(UINT threads_per_core, INT core_count_adjustment)
 	SYSTEM_INFO sysinfo;
 	GetSystemInfo(&sysinfo);
 
-	// Calculate the number of threads we need
-	m_nThreads = threads_per_core * max(1, (sysinfo.dwNumberOfProcessors + core_count_adjustment));
-
-	// allocate thread handles
-	m_hThreads = (HANDLE *)malloc(sizeof(HANDLE) * m_nThreads);
+	// Calculate the number of threads we need and allocate thread handles
+	m_hThreads.resize(threads_per_core * max(1, (sysinfo.dwNumberOfProcessors + core_count_adjustment)));
 
 	InitializeCriticalSection(&m_csTaskList);
 
 	// this is the quit semaphore...
-	m_hSemaphores[TS_QUIT] = CreateSemaphore(NULL, 0, m_nThreads, NULL);
+	m_hSemaphores[TS_QUIT] = CreateSemaphore(NULL, 0, (LONG)m_hThreads.size(), NULL);
 
 	// this is the run semaphore...
-	m_hSemaphores[TS_RUN] = CreateSemaphore(NULL, 0, m_nThreads, NULL);
+	m_hSemaphores[TS_RUN] = CreateSemaphore(NULL, 0, (LONG)m_hThreads.size(), NULL);
 
-	for (UINT i = 0; i < m_nThreads; i++)
+	for (size_t i = 0; i < m_hThreads.size(); i++)
 	{
-		m_hThreads[i] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)_WorkerThreadProc, (LPVOID)this, 0, NULL);
+		m_hThreads[i] = std::thread(_WorkerThreadProc, this);
 	}
 }
 
@@ -66,13 +63,15 @@ CThreadPool::~CThreadPool()
 {
 	PurgeAllPendingTasks();
 
-	ReleaseSemaphore(m_hSemaphores[TS_QUIT], m_nThreads, NULL);
-	WaitForMultipleObjects(m_nThreads, m_hThreads, TRUE, INFINITE);
+	ReleaseSemaphore(m_hSemaphores[TS_QUIT], (LONG)m_hThreads.size(), NULL);
+
+    for (size_t i = 0; i < m_hThreads.size(); i++)
+    {
+        m_hThreads[i].join();
+    }
 
 	CloseHandle(m_hSemaphores[TS_QUIT]);
 	CloseHandle(m_hSemaphores[TS_RUN]);
-
-	free((void *)m_hThreads);
 
 	DeleteCriticalSection(&m_csTaskList);
 }
@@ -103,18 +102,16 @@ void CThreadPool::WorkerThreadProc()
 }
 
 
-DWORD CThreadPool::_WorkerThreadProc(LPVOID param)
+void CThreadPool::_WorkerThreadProc(CThreadPool *param)
 {
 	CThreadPool *_this = (CThreadPool *)param;
 	_this->WorkerThreadProc();
-
-	return 0;
 }
 
 
 bool CThreadPool::RunTask(TASK_CALLBACK task, LPVOID param0, LPVOID param1, LPVOID param2, UINT numtimes, bool block)
 {
-	UINT blockwait;
+	size_t blockwait;
 
 	EnterCriticalSection(&m_csTaskList);
 
@@ -125,7 +122,7 @@ bool CThreadPool::RunTask(TASK_CALLBACK task, LPVOID param0, LPVOID param1, LPVO
 
 	LeaveCriticalSection(&m_csTaskList);
 
-	ReleaseSemaphore(m_hSemaphores[TS_RUN], m_nThreads, NULL);
+	ReleaseSemaphore(m_hSemaphores[TS_RUN], (LONG)m_hThreads.size(), NULL);
 
 	if (block)
 	{
@@ -160,7 +157,7 @@ void CThreadPool::PurgeAllPendingTasks()
 
 UINT CThreadPool::GetNumThreads()
 {
-	return m_nThreads;
+	return (UINT)m_hThreads.size();
 }
 
 
@@ -183,7 +180,7 @@ bool CThreadPool::GetNextTask(STaskInfo &task)
 }
 
 
-CThreadPool::STaskInfo::STaskInfo(CThreadPool::TASK_CALLBACK task, LPVOID param0, LPVOID param1, LPVOID param2, UINT *pactionref) :
+CThreadPool::STaskInfo::STaskInfo(CThreadPool::TASK_CALLBACK task, LPVOID param0, LPVOID param1, LPVOID param2, size_t *pactionref) :
 	m_Task(task),
 	m_pActionRef(pactionref)
 {
