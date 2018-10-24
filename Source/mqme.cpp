@@ -1,7 +1,7 @@
 /*
 	mqme Library Source File
 
-	Copyright © 2009-2017, Keelan Stuart. All rights reserved.
+	Copyright © 2009-2018, Keelan Stuart. All rights reserved.
 
 	mqme (pronounced "make me") is a Windows-only C++ API and library that facilitates easy
 	distribution of network	packets	with multiple connection end-points. One-to-many is just
@@ -63,7 +63,8 @@ bool mqme::Initialize(UINT initial_idle_packet_count, UINT initial_packet_size, 
 		return true;
 
 	WSADATA wsaData;
-	WSAStartup(MAKEWORD(2, 2), &wsaData);
+    if (0 != WSAStartup(MAKEWORD(2, 2), &wsaData))
+        return false;
 
 	g_IdlePackets = new CPacketQueue(initial_idle_packet_count, initial_packet_size);
 	g_ThreadPool = new CThreadPool(threads_per_core, core_count_adjustment);

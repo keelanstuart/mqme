@@ -47,7 +47,7 @@ typedef std::basic_string<TCHAR, std::char_traits<TCHAR>, std::allocator<TCHAR> 
 #define LOCAL_TCS2MBCS(wcs, mbcs) {               \
   size_t origsize = _tcslen(wcs) + 1;             \
   size_t newsize = (origsize * 2) * sizeof(char); \
-  mbcs = (char *)_alloca(newsize);                \
+  mbcs = (char *)_malloca(newsize);               \
   wcstombs(mbcs, wcs, newsize); }
 
 #define LOCAL_TCS2WCS(mbcs, wcs) wcs = mbcs
@@ -59,7 +59,7 @@ typedef std::basic_string<TCHAR, std::char_traits<TCHAR>, std::allocator<TCHAR> 
 #define LOCAL_TCS2WCS(mbcs, wcs) {                \
   size_t origsize = strlen(mbcs) + 1;             \
   size_t newsize = origsize * sizeof(TCHAR);      \
-  wcs = (TCHAR *)_alloca(newsize);                \
+  wcs = (TCHAR *)_malloca(newsize);               \
   mbstowcs(wcs, mbcs, newsize); }
 
 #endif

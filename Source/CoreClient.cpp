@@ -1,7 +1,7 @@
 /*
 	mqme Library Source File
 
-	Copyright © 2009-2017, Keelan Stuart. All rights reserved.
+	Copyright © 2009-2018, Keelan Stuart. All rights reserved.
 
 	mqme (pronounced "make me") is a Windows-only C++ API and library that facilitates easy
 	distribution of network	packets	with multiple connection end-points. One-to-many is just
@@ -158,6 +158,8 @@ public:
 
 				char *tmpaddr;
 				LOCAL_TCS2MBCS(m_ServerAddr.c_str(), tmpaddr);
+                if (!tmpaddr)
+                    return false;
 
 				if (isalpha(tmpaddr[0]))
 				{
