@@ -20,6 +20,12 @@ CTestClientDlg::CTestClientDlg(CWnd* pParent /*=NULL*/)
 	: CDialogEx(IDD_TESTCLIENT_DIALOG, pParent)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
+    InitializeCriticalSection(&m_csLog);
+}
+
+CTestClientDlg::~CTestClientDlg()
+{
+    DeleteCriticalSection(&m_csLog);
 }
 
 void CTestClientDlg::DoDataExchange(CDataExchange* pDX)
@@ -150,18 +156,20 @@ HCURSOR CTestClientDlg::OnQueryDragIcon()
 
 void CTestClientDlg::AppendLog(const TCHAR *text, COLORREF color, bool bold, bool italic)
 {
-	CHARFORMAT cf = { 0 };
+    EnterCriticalSection(&m_csLog);
+
+    CHARFORMAT cf = { 0 };
 	int txtlen = m_edLog.GetTextLength();
 
 	CString t;
 	if (txtlen)
-		t = _T("\n");
+		t = _T("\r\n");
 
 	t += text;
 
 	cf.cbSize = sizeof(cf);
 	cf.dwMask = CFM_BOLD | CFM_ITALIC | CFM_COLOR;
-	cf.dwEffects = (bold ? CFE_BOLD : 0) | (italic ? CFE_ITALIC : 0) | ~CFE_AUTOCOLOR;
+	cf.dwEffects = (bold ? CFE_BOLD : 0) | (italic ? CFE_ITALIC : 0) & ~CFE_AUTOCOLOR;
 	cf.crTextColor = color;
 
 	m_edLog.SetSel(txtlen, -1);
@@ -170,6 +178,8 @@ void CTestClientDlg::AppendLog(const TCHAR *text, COLORREF color, bool bold, boo
 	m_edLog.SetSel(m_edLog.GetTextLength() - txtlen, m_edLog.GetTextLength());
 	m_edLog.SetSelectionCharFormat(cf);
 	m_edLog.LineScroll(m_edLog.GetLineCount(), 0);
+
+    LeaveCriticalSection(&m_csLog);
 }
 
 

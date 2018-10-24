@@ -12,6 +12,7 @@ class CTestClientDlg : public CDialogEx
 // Construction
 public:
 	CTestClientDlg(CWnd* pParent = NULL);	// standard constructor
+    virtual ~CTestClientDlg();
 
 // Dialog Data
 #ifdef AFX_DESIGN_TIME
@@ -29,6 +30,7 @@ protected:
 	HICON m_hIcon;
 
 	mqme::ICoreClient *m_pClient;
+    CRITICAL_SECTION m_csLog;
 
 	CEdit m_edAddr;
 	CButton m_btnConnect;
