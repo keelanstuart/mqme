@@ -1,7 +1,7 @@
 /*
 	mqme Library Source File
 
-	Copyright © 2009-2018, Keelan Stuart. All rights reserved.
+	Copyright © 2009-2019, Keelan Stuart. All rights reserved.
 
 	mqme (pronounced "make me") is a Windows-only C++ API and library that facilitates easy
 	distribution of network	packets	with multiple connection end-points. One-to-many is just
@@ -269,133 +269,6 @@ public:
 
 	/// Instantiates a new client object
 	MQME_API static ICoreClient *NewClient();
-};
-
-/// IProperty and IPropertySet are not integral to mqme, but are provided
-/// as helpers for serializing and deserializing user data.
-class IProperty
-{
-public:
-
-	enum PROPERTY_TYPE
-	{
-		PT_NONE = 0,		/// uninitialized
-
-		PT_STRING,
-		PT_INT,
-		PT_FLOAT,
-		PT_GUID,
-
-		PT_NUMTYPES
-	};
-
-	/// The idea is this: a property can have a type that may not fully express what the data is used for...
-	/// this additional information may be used in an editing application to display special widgets like
-	/// sliders, file browse buttons, color pickers, and more.
-	enum PROPERTY_ASPECT
-	{
-		PA_GENERIC = 0,
-
-		PA_FILENAME,		/// STRING
-		PA_BOOLEAN,			/// INT - 0 | 1
-
-		PA_NUMASPECTS
-	};
-
-	/// When serializing, how should the property store itself?
-	enum SERIALIZE_MODE
-	{
-		/// stores...
-
-		SM_BIN_VALUESONLY = 0,	/// (binary format) id, type, value
-		SM_BIN_TERSE,			/// (binary format) id, type, aspect, value
-		SM_BIN_VERBOSE,			/// (binary format) name, id, type, aspect, value
-
-		SM_NUMMODES
-	};
-
-	virtual void Release() = NULL;
-
-	/// property name accessors
-	virtual const TCHAR *GetName() = NULL;
-	virtual void SetName(const TCHAR *name) = NULL;
-
-	/// ID accessor methods
-	virtual FOURCHARCODE GetID() = NULL;
-	virtual void SetID(FOURCHARCODE id) = NULL;
-
-	/// Get the data type currently stored in this property
-	virtual PROPERTY_TYPE GetType() = NULL;
-
-	/// Allows you to convert a property from one type to another
-	virtual bool ConvertTo(PROPERTY_TYPE newtype) = NULL;
-
-	/// Aspect accessor methods
-	virtual PROPERTY_ASPECT GetAspect() = NULL;
-	virtual void SetAspect(PROPERTY_ASPECT aspect) = NULL;
-
-	/// Sets the data
-	virtual void SetInt(INT64 val) = NULL;
-	virtual void SetFloat(double val) = NULL;
-	virtual void SetString(const TCHAR *val) = NULL;
-	virtual void SetGUID(GUID val) = NULL;
-
-	/// Sets the data from another property
-	virtual void SetFromProperty(IProperty *pprop) = NULL;
-
-	virtual INT64 AsInt(INT64 *ret = NULL) = NULL;
-	virtual double AsFloat(double *ret = NULL) = NULL;
-	virtual const TCHAR *AsString(TCHAR *ret = NULL, INT retsize = -1) = NULL;
-	virtual GUID AsGUID(GUID *ret = NULL) = NULL;
-};
-
-
-class IPropertySet
-{
-public:
-
-	virtual void Release() = NULL;
-
-	/// Creates a new property and adds it to this property set
-	virtual IProperty *CreateProperty(const TCHAR *propname, FOURCHARCODE propid) = NULL;
-
-	/// Adds a new property to this property set
-	virtual void AddProperty(IProperty *pprop) = NULL;
-
-	/// Deletes a property from this set, based on a given index...
-	virtual void DeleteProperty(size_t idx) = NULL;
-
-	/// Deletes a property from this set, based on a given property id...
-	virtual void DeletePropertyById(FOURCHARCODE propid) = NULL;
-
-	/// Deletes a property from this set, based on a given property name...
-	virtual void DeletePropertyByName(const TCHAR *propname) = NULL;
-
-	/// Deletes all properties from this set...
-	virtual void DeleteAll() = NULL;
-
-	virtual size_t GetPropertyCount() = NULL;
-
-	virtual IProperty *GetProperty(size_t idx) = NULL;
-
-	/// Gets a property from this set, given a property id
-	virtual IProperty *GetPropertyById(FOURCHARCODE propid) = NULL;
-
-	/// Gets a property from this set, given a property name
-	virtual IProperty *GetPropertyByName(const TCHAR *propname) = NULL;
-
-	/// Takes the properties from the given list and appends them to this set...
-	virtual void AppendPropertySet(IPropertySet *propset) = NULL;
-
-	/// Writes all properties to a binary stream
-	/// If buf is null but amountused is not, the number of bytes required to fully
-	/// store the property set will be placed at amountused
-	virtual bool Serialize(IProperty::SERIALIZE_MODE mode, BYTE *buf, size_t bufsize, size_t *amountused = NULL) const = NULL;
-
-	/// Creates an instance of the IPropertySet interface, allowing the user to add IProperty's to it
-	/// These can be serialized to a packet and distributed to a set of listeners. Imagination is the only limitation.
-	/// (Only included as an example, use or not, with discretion)
-	MQME_API static IPropertySet *CreatePropertySet();
 };
 
 
