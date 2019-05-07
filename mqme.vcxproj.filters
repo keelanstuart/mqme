@@ -33,9 +33,6 @@
     <ClCompile Include="Source\PacketQueue.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Source\ThreadPool.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="Source\stdafx.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -51,9 +48,6 @@
       <Filter>Header Files\private</Filter>
     </ClInclude>
     <ClInclude Include="Source\stdafx.h">
-      <Filter>Header Files\private</Filter>
-    </ClInclude>
-    <ClInclude Include="Source\ThreadPool.h">
       <Filter>Header Files\private</Filter>
     </ClInclude>
   </ItemGroup>

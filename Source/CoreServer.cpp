@@ -33,15 +33,14 @@
 #include "stdafx.h"
 
 #include <mqme.h>
-#include <winsock2.h>
 #include <ObjBase.h>
 #include <set>
 
 #include "Packet.h"
 #include "PacketQueue.h"
-#include "ThreadPool.h"
+#include <Pool.h>
 
-extern CThreadPool *g_ThreadPool;
+extern pool::IThreadPool *g_ThreadPool;
 extern bool g_Initialized;
 
 
@@ -462,7 +461,7 @@ private:
 	}
 
 
-	static void WINAPI ProcessPacket(LPVOID param0, LPVOID param1, LPVOID param2)
+	static void WINAPI ProcessPacket(LPVOID param0, LPVOID param1, size_t task_number)
 	{
 		CCoreServer *_this = (CCoreServer *)param0;
 		CPacket *ppkt = (CPacket *)param1;

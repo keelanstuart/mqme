@@ -36,7 +36,7 @@
 #include <mqme.h>
 #include "Packet.h"
 #include "PacketQueue.h"
-#include "ThreadPool.h"
+#include <Pool.h>
 
 
 // Need to link with Ws2_32.lib
@@ -52,7 +52,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 }
 
 CPacketQueue *g_IdlePackets = NULL;
-CThreadPool *g_ThreadPool = NULL;
+pool::IThreadPool *g_ThreadPool = NULL;
 bool g_Initialized = false;
 
 bool operator <(const GUID &a, const GUID &b) { return (memcmp(&a, &b, sizeof(GUID)) <= 0) ? true : false; }
@@ -67,7 +67,7 @@ bool mqme::Initialize(UINT initial_idle_packet_count, UINT initial_packet_size, 
         return false;
 
 	g_IdlePackets = new CPacketQueue(initial_idle_packet_count, initial_packet_size);
-	g_ThreadPool = new CThreadPool(threads_per_core, core_count_adjustment);
+	g_ThreadPool = pool::IThreadPool::Create(threads_per_core, core_count_adjustment);
 
 	g_Initialized = (g_IdlePackets != nullptr) && (g_ThreadPool != nullptr);
 
@@ -90,7 +90,7 @@ void mqme::Close()
 
 	if (g_ThreadPool)
 	{
-		delete g_ThreadPool;
+		g_ThreadPool->Release();
 		g_ThreadPool = NULL;
 	}
 }
