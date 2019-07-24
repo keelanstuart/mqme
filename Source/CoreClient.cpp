@@ -309,6 +309,15 @@ private:
 		CCoreClient *_this = (CCoreClient *)param0;
 
 		_this->Disconnect();
+
+		TEventHandlerMap::const_iterator it = _this->m_EventHandlerMap.find(ET_DISCONNECTED);
+		if (it != _this->m_EventHandlerMap.cend())
+		{
+			EVENT_HANDLER func = it->second.func;
+			LPVOID param = it->second.userdata;
+
+			func(_this, ET_DISCONNECTED, param);
+		}
 	}
 
 	static DWORD WINAPI RecvThreadProc(LPVOID param)
