@@ -22,7 +22,6 @@
     <ProjectGuid>{CF62610A-3667-40BD-8E11-30103DAA6EC0}</ProjectGuid>
     <RootNamespace>mqme</RootNamespace>
     <Keyword>Win32Proj</Keyword>
-    <WindowsTargetPlatformVersion>10.0.14393.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
