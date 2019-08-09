@@ -5,11 +5,16 @@
 
 #pragma once
 
+#if defined(_DEBUG)
+#define _CRTDBG_MAP_ALLOC
+#include <stdlib.h>
+#include <crtdbg.h>
+#endif
+
 #define WIN32_LEAN_AND_MEAN		// Exclude rarely-used stuff from Windows headers
 
 #include <windows.h>
 #include <winsock2.h>
-#include <stdlib.h>
 #include <malloc.h>
 #include <memory.h>
 #include <tchar.h>
@@ -29,7 +34,7 @@ typedef std::basic_string<TCHAR, std::char_traits<TCHAR>, std::allocator<TCHAR> 
 #define LOCAL_TCS2MBCS(wcs, mbcs) {               \
   size_t origsize = _tcslen(wcs) + 1;             \
   size_t newsize = (origsize * 2) * sizeof(char); \
-  mbcs = (char *)_malloca(newsize);               \
+  mbcs = (char *)_alloca(newsize);                \
   wcstombs(mbcs, wcs, newsize); }
 
 #define LOCAL_TCS2WCS(mbcs, wcs) wcs = mbcs
@@ -41,7 +46,7 @@ typedef std::basic_string<TCHAR, std::char_traits<TCHAR>, std::allocator<TCHAR> 
 #define LOCAL_TCS2WCS(mbcs, wcs) {                \
   size_t origsize = strlen(mbcs) + 1;             \
   size_t newsize = origsize * sizeof(TCHAR);      \
-  wcs = (TCHAR *)_malloca(newsize);               \
+  wcs = (TCHAR *)_alloca(newsize);                \
   mbstowcs(wcs, mbcs, newsize); }
 
 #endif
