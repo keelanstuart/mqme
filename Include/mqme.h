@@ -127,10 +127,10 @@ public:
 	virtual bool Empty() = NULL;
 
 	/// A parameter to the ForEach function; will be called for each GUID in the set
-	typedef void(*EachGUIDFunc)(GUID id, void *userdata1, void *userdata2);
+	typedef void(__cdecl *EACH_GUID_FUNC)(GUID id, void *userdata1, void *userdata2);
 
 	/// Calls the given user-defined function back for each GUID in the set. Passes it userdata1 and userdata2
-	virtual void ForEach(EachGUIDFunc func, void *userdata1 = nullptr, void *userdata2 = nullptr) = NULL;
+	virtual void ForEach(EACH_GUID_FUNC func, void *userdata1 = nullptr, void *userdata2 = nullptr) = NULL;
 };
 
 
@@ -160,12 +160,12 @@ public:
 	/// ICoreServer::RegisterHandler arrives.  This callback will be given
 	/// the ICoreServer interface which received the data, the packet itself, and
 	/// the client from which the packet arrived
-	typedef bool (*PACKET_HANDLER)(ICoreServer *server, ICorePacket *packet, LPVOID userdata);
+	typedef bool (__cdecl *PACKET_HANDLER)(ICoreServer *server, ICorePacket *packet, LPVOID userdata);
 
 	/// The EVENT_HANDLER is a callback function provided by the user
 	/// that will be called when an event specified in the ICoreServer::EEventType
 	/// occurs.
-	typedef bool (*EVENT_HANDLER)(ICoreServer *server, EEventType ev, GUID generator, LPVOID userdata);
+	typedef bool (__cdecl *EVENT_HANDLER)(ICoreServer *server, EEventType ev, GUID generator, LPVOID userdata);
 
 	/// Releases the server, implicitly calling StopListening
 	virtual void Release() = NULL;
@@ -228,12 +228,12 @@ public:
 	/// that will be called when a packet matching the type given in the
 	/// ICoreClient::RegisterPacketHandler arrives.  This callback will be given
 	/// the ICoreClient interface which received the data and the packet itself.
-	typedef bool (*PACKET_HANDLER)(ICoreClient *client, ICorePacket *packet, LPVOID userdata);
+	typedef bool (__cdecl *PACKET_HANDLER)(ICoreClient *client, ICorePacket *packet, LPVOID userdata);
 
 	/// The EVENT_HANDLER is a callback function provided by the user
 	/// that will be called when an event specified in the ICoreClient::EEventType
 	/// occurs.
-	typedef bool(*EVENT_HANDLER)(ICoreClient *client, EEventType ev, LPVOID userdata);
+	typedef bool(__cdecl *EVENT_HANDLER)(ICoreClient *client, EEventType ev, LPVOID userdata);
 
 	/// Releases the client, implicitly calling Disconnect
 	/// WARNING: Once the client has been released, do not

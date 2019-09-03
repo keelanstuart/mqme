@@ -289,7 +289,7 @@ public:
 	}
 
 private:
-	static void WINAPI ProcessPacket(LPVOID param0, LPVOID param1, size_t task_number)
+	static void __cdecl ProcessPacket(LPVOID param0, LPVOID param1, size_t task_number)
 	{
 		CCoreClient *_this = (CCoreClient *)param0;
 		CPacket *ppkt = (CPacket *)param1;
@@ -304,7 +304,7 @@ private:
 		ppkt->Release();
 	}
 
-	static void WINAPI PrivateDisconnect(LPVOID param0, LPVOID param1, size_t task_number)
+	static void __cdecl PrivateDisconnect(LPVOID param0, LPVOID param1, size_t task_number)
 	{
 		CCoreClient *_this = (CCoreClient *)param0;
 

@@ -87,7 +87,7 @@ public:
 		return m_GUIDSet.empty();
 	}
 
-	virtual void ForEach(EachGUIDFunc func, LPVOID userdata1, LPVOID userdata2)
+	virtual void ForEach(EACH_GUID_FUNC func, LPVOID userdata1, LPVOID userdata2)
 	{
 		if (!func)
 			return;
@@ -461,7 +461,7 @@ private:
 	}
 
 
-	static void WINAPI ProcessPacket(LPVOID param0, LPVOID param1, size_t task_number)
+	static void __cdecl ProcessPacket(LPVOID param0, LPVOID param1, size_t task_number)
 	{
 		CCoreServer *_this = (CCoreServer *)param0;
 		CPacket *ppkt = (CPacket *)param1;
