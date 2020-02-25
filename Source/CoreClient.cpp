@@ -35,6 +35,7 @@
 #include <Windows.h>
 #include <mqme.h>
 #include <ObjBase.h>
+#include <fcntl.h>
 
 #include "Packet.h"
 #include "PacketQueue.h"
@@ -153,6 +154,8 @@ public:
 			if (m_Socket != INVALID_SOCKET)
 			{
 				sockaddr_in clientService;
+				memset(&clientService, 0, sizeof(sockaddr_in));
+
 				clientService.sin_family = AF_INET;
 
 				char *tmpaddr;
@@ -172,6 +175,10 @@ public:
 				}
 
 				clientService.sin_port = htons(m_ServerPort);
+
+				// non-blocking mode, if you please.
+				u_long mode = 1;
+				ioctlsocket(m_Socket, FIONBIO, &mode);
 
 				if (connect(m_Socket, (SOCKADDR *)&clientService, sizeof(clientService)) == SOCKET_ERROR)
 				{
