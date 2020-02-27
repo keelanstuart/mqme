@@ -182,25 +182,17 @@ public:
 
 				if (connect(m_Socket, (SOCKADDR *)&clientService, sizeof(clientService)) == SOCKET_ERROR)
 				{
-					closesocket(m_Socket);
-					m_Socket = NULL;
-
 					int err = WSAGetLastError();
+					if (err != WSAEWOULDBLOCK)
+					{
+						closesocket(m_Socket);
+						m_Socket = INVALID_SOCKET;
 
-					return false;
+						return false;
+					}
 				}
 
-				WSABUF buf;
-				DWORD flags = 0;
-				DWORD ct = 0;
-				int q;
-
-				// the first thing a client sends to a server upon connection is it's GUID
-				buf.buf = (char *)&m_GUID;
-				buf.len = sizeof(GUID);
-				q = WSASend(m_Socket, &buf, 1, &ct, 0, NULL, NULL);
-
-				WSAEventSelect(m_Socket, m_WSEvent, FD_CLOSE | FD_READ);
+				WSAEventSelect(m_Socket, m_WSEvent, FD_CLOSE | FD_READ | FD_CONNECT);
 
 				if (!m_SendThread)
 				{
@@ -327,6 +319,30 @@ private:
 		}
 	}
 
+	static void __cdecl PrivateConnect(LPVOID param0, LPVOID param1, size_t task_number)
+	{
+		CCoreClient *_this = (CCoreClient *)param0;
+
+		WSABUF buf;
+		DWORD flags = 0;
+		DWORD ct = 0;
+		int q;
+
+		// the first thing a client sends to a server upon connection is it's GUID
+		buf.buf = (char *)&_this->m_GUID;
+		buf.len = sizeof(GUID);
+		q = WSASend(_this->m_Socket, &buf, 1, &ct, 0, NULL, NULL);
+
+		TEventHandlerMap::const_iterator it = _this->m_EventHandlerMap.find(ET_CONNECTED);
+		if (it != _this->m_EventHandlerMap.cend())
+		{
+			EVENT_HANDLER func = it->second.func;
+			LPVOID param = it->second.userdata;
+
+			func(_this, ET_CONNECTED, param);
+		}
+	}
+
 	static DWORD WINAPI RecvThreadProc(LPVOID param)
 	{
 		CCoreClient *_this = (CCoreClient *)param;
@@ -346,11 +362,20 @@ private:
 				WSANETWORKEVENTS ne;
 				if (WSAEnumNetworkEvents(_this->m_Socket, _this->m_WSEvent, &ne) == 0)
 				{
+					if (ne.lNetworkEvents & FD_CONNECT)
+					{
+						g_ThreadPool->RunTask(PrivateConnect, (LPVOID)_this);
+						break;
+					}
+
 					if (ne.lNetworkEvents & FD_CLOSE)
 					{
 						g_ThreadPool->RunTask(PrivateDisconnect, (LPVOID)_this);
 						break;
 					}
+
+					if (!(ne.lNetworkEvents & FD_READ))
+						continue;
 				}
 
 				CPacket *ppkt = (CPacket *)mqme::ICorePacket::NewPacket();

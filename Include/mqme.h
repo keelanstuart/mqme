@@ -219,6 +219,7 @@ public:
 	{
 		ET_NONE = 0,
 
+		ET_CONNECTED,			/// this client has been connected
 		ET_DISCONNECTED,		/// this client has been disconnected
 
 		ET_NUMEVENTS
