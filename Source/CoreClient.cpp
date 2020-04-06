@@ -63,6 +63,8 @@ protected:
 	CPacketQueue m_InPackets;
 	CPacketQueue m_OutPackets;
 
+	bool m_Connected;
+
 	typedef struct sPacketHandlerCallInfo
 	{
 		sPacketHandlerCallInfo(PACKET_HANDLER _func, LPVOID _userdata) { func = _func; userdata = _userdata; }
@@ -106,6 +108,8 @@ public:
 
 		m_SendThread = NULL;
 		m_SendThreadId = 0;
+
+		m_Connected = false;
 
 		CoCreateGuid(&m_GUID);
 	}
@@ -241,6 +245,8 @@ public:
 		}
 
 		FlushOutgoingPackets();
+
+		m_Connected = false;
 	}
 
 	// Returns the state of connection
@@ -256,6 +262,7 @@ public:
 		CPacket *p = dynamic_cast<CPacket *>(packet);
 		if (p)
 		{
+			p->IncRef();
 			m_OutPackets.Enque(p);
 
 			return true;
@@ -341,6 +348,8 @@ private:
 
 			func(_this, ET_CONNECTED, param);
 		}
+
+		_this->m_Connected = true;
 	}
 
 	static DWORD WINAPI RecvThreadProc(LPVOID param)
@@ -437,22 +446,25 @@ private:
 					{
 						ppkt->SetSender(_this->m_GUID);
 
-						WSABUF buf[2];
-						buf[0].buf = (char *)ppkt->GetHeader();
-						buf[0].len = ppkt->GetHeaderLength();
-						buf[1].buf = (char *)ppkt->GetData();
-						buf[1].len = ppkt->GetDataLength();
+						if (_this->m_Connected)
+						{
+							WSABUF buf[2];
+							buf[0].buf = (char *)ppkt->GetHeader();
+							buf[0].len = ppkt->GetHeaderLength();
+							buf[1].buf = (char *)ppkt->GetData();
+							buf[1].len = ppkt->GetDataLength();
 
-						DWORD sct = 0;
+							DWORD sct = 0;
 
-						int q = WSASend(_this->m_Socket, buf, 2, &sct, 0, NULL, NULL);
+							int q = WSASend(_this->m_Socket, buf, 2, &sct, 0, NULL, NULL);
+
+							if (q == SOCKET_ERROR)
+							{
+								DWORD err = WSAGetLastError();
+							}
+						}
 
 						ppkt->Release();
-
-						if (q == SOCKET_ERROR)
-						{
-							DWORD err = WSAGetLastError();
-						}
 					}
 
 					Sleep(0);
