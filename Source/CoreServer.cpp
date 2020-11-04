@@ -256,11 +256,17 @@ public:
 
 	virtual bool SendPacket(ICorePacket *packet)
 	{
-		if (!packet)
-			return false;
+		CPacket *p = dynamic_cast<CPacket *>(packet);
+		if (p)
+		{
+			p->IncRef();
+			m_Outgoing.Enque(p);
 
-		m_Outgoing.Enque((CPacket *)packet);
-		return true;
+			return true;
+		}
+
+		// You're hosed
+		return false;
 	}
 
 	virtual bool AddListenerToChannel(GUID channel, GUID listener)
