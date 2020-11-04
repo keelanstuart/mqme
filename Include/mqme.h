@@ -1,7 +1,7 @@
 /*
 	mqme Library Source File
 
-	Copyright © 2009-2019, Keelan Stuart. All rights reserved.
+	Copyright © 2009-2020, Keelan Stuart. All rights reserved.
 
 	mqme (pronounced "make me") is a Windows-only C++ API and library that facilitates easy
 	distribution of network	packets	with multiple connection end-points. One-to-many is just
@@ -18,15 +18,15 @@
 	subscriptions. In essence, it was my opinion that none of those packages was
 	"good enough" for me, making me write my own.
 
-    mqme is free software; you can redistribute it and/or modify it under
-    the terms of the GNU Lesser General Public License as published by
-    the Free Software Foundation; either version 3 of the License, or
-    (at your option) any later version.
+	mqme is free software; you can redistribute it and/or modify it under
+	the terms of the GNU Lesser General Public License as published by
+	the Free Software Foundation; either version 3 of the License, or
+	(at your option) any later version.
 
-    mqme is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Lesser General Public License for more details.
+	mqme is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+	GNU Lesser General Public License for more details.
 	See <http://www.gnu.org/licenses/>.
 */
 

@@ -1,7 +1,7 @@
 /*
 	mqme Library Source File
 
-	Copyright © 2009-2018, Keelan Stuart. All rights reserved.
+	Copyright © 2009-2020, Keelan Stuart. All rights reserved.
 
 	mqme (pronounced "make me") is a Windows-only C++ API and library that facilitates easy
 	distribution of network	packets	with multiple connection end-points. One-to-many is just
@@ -29,7 +29,6 @@
 	GNU Lesser General Public License for more details.
 	See <http://www.gnu.org/licenses/>.
 */
-
 
 #include "stdafx.h"
 
