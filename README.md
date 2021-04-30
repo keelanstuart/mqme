@@ -1,35 +1,43 @@
 # mqme
 mqme - A network message queuing library written in C++ for Windows platforms (x86 / x64)
 
+
 ****
+
 
 mqme simplifies client-server network communications; there are three basic interfaces to work with (and most of the time, only two in a single application): client, server, and packet.
 
-Packets:
-	* have a type, represented by a four-character-code
-	* have a context (channel)
-	* recycle themselves to reduce or eliminate runtime allocations
+### Packets:
+* have a type, represented by a four-character-code
+* have a context (channel)
+* recycle themselves to reduce or eliminate runtime allocations
 
-Servers:
-	* accept client connections
-	* have channels
-	* route received packets to clients in the context channel
-	* optionally process packets themselves
-	* optionally send server-origin packets to clients
-	* manage channel members
 
-Clients:
-	* connect to a server
-	* optionally send packets to server
-	* optionally process packets
+### Servers:
+* accept client connections
+* have channels
+* route received packets to clients in the context channel
+* optionally process packets themselves
+* optionally send server-origin packets to clients
+* manage channel members
+
+
+### Clients:
+* connect to a server
+* optionally send packets to server
+* optionally process packets
+
 
 ****
 
+
+### Getting Started
+
 First, call mqme::Initialize to start things up... you have four things to decide (but there are defaults!):
-	* how many packets should initially be in the packet cache
-	* the initial maximum size of each packets
-	* the number of threads per core to use for processing incoming packets
-	* a modifier to the number of cores
+* how many packets should initially be in the packet cache
+* the initial maximum size of each packets
+* the number of threads per core to use for processing incoming packets
+* a modifier to the number of cores
 	
 Next, create a client or server using either mqme::ICoreClient::NewClient() or mqme::ICoreServer::NewServer() ...
 
@@ -41,9 +49,11 @@ When you want to send data, call mqme::ICorePacket::NewPacket() to get a packet 
 
 When you're all done, call Disconnect (mqme::ICoreClient) or StopListening (mqme::ICoreServer), followed by mqme::Close().
 
+
 ****
 
-Contexts: a Primer
+
+### Contexts: a Primer
 
 A "context", in the mqme world, is a GUID.
 
