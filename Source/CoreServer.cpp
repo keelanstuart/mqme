@@ -92,9 +92,9 @@ public:
 		if (!func)
 			return;
 
-		for (TGUIDSet::const_iterator it = m_GUIDSet.begin(); it != m_GUIDSet.end(); it++)
+		for (const auto &it : m_GUIDSet)
 		{
-			func(*it, userdata1, userdata2);
+			func(it, userdata1, userdata2);
 		}
 	}
 
@@ -597,9 +597,9 @@ private:
 					TGUIDSetMap::iterator lit = _this->m_ListeningTable.find(it->first);
 					if (lit != _this->m_ListeningTable.end())
 					{
-						for (TGUIDSet::iterator elit = lit->second.m_GUIDSet.begin(), last_elit = lit->second.m_GUIDSet.end(); elit != last_elit; elit++)
+						for (auto &elit : lit->second.m_GUIDSet)
 						{
-							TGUIDSetMap::iterator rit = _this->m_RoutingTable.find(*elit);
+							TGUIDSetMap::iterator rit = _this->m_RoutingTable.find(elit);
 							rit->second.Remove(it->first);
 						}
 
@@ -610,7 +610,7 @@ private:
 					CloseHandle(it->second.ev);
 
 					// if we have a registered packet handler, then schedule it to run
-					TEventHandlerMap::iterator peit = _this->m_EventHandlerMap.find(ICoreServer::ET_DISCONNECT);
+					auto &peit = _this->m_EventHandlerMap.find(ICoreServer::ET_DISCONNECT);
 					if (peit != _this->m_EventHandlerMap.end())
 						peit->second.func(_this, ICoreServer::ET_DISCONNECT, it->first, peit->second.userdata);
 
@@ -657,13 +657,13 @@ private:
 					buf[1].len = ppkt->GetDataLength();
 
 					// send the packet to each listener
-					for (TGUIDSet::iterator git = cit->second.m_GUIDSet.begin(), last_git = cit->second.m_GUIDSet.end(); git != last_git; git++)
+					for (auto &git : cit->second.m_GUIDSet)
 					{
-						if (*git == ppkt->GetSender())
+						if (git == ppkt->GetSender())
 							continue;
 
 						// get the socket for the listener's GUID
-						TConnectionMap::iterator sit = _this->m_ConnectionMap.find(*git);
+						auto &sit = _this->m_ConnectionMap.find(git);
 						if (sit != _this->m_ConnectionMap.end())
 						{
 							DWORD sct;
