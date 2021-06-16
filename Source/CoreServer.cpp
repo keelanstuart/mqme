@@ -467,7 +467,7 @@ private:
 	}
 
 
-	static void __cdecl ProcessPacket(LPVOID param0, LPVOID param1, size_t task_number)
+	static  pool::IThreadPool::TASK_RETURN __cdecl ProcessPacket(void *param0, void *param1, size_t task_number)
 	{
 		CCoreServer *_this = (CCoreServer *)param0;
 		CPacket *ppkt = (CPacket *)param1;
@@ -480,6 +480,8 @@ private:
 		}
 
 		ppkt->Release();
+
+		return pool::IThreadPool::TR_OK;
 	}
 
 	static DWORD WINAPI RecvThreadProc(void *param)
@@ -574,7 +576,7 @@ private:
 							// if we have a registered packet handler, then schedule it to run
 							TPacketHandlerMap::iterator phit = _this->m_PacketHandlerMap.find(ppkt->GetID());
 							if (phit != _this->m_PacketHandlerMap.end())
-								g_ThreadPool->RunTask(ProcessPacket, (LPVOID)_this, (LPVOID)ppkt);
+								g_ThreadPool->RunTask(ProcessPacket, (void *)_this, (void *)ppkt);
 						}
 					}
 					else switch (WSAGetLastError())

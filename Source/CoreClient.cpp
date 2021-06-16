@@ -295,7 +295,7 @@ public:
 	}
 
 private:
-	static void __cdecl ProcessPacket(LPVOID param0, LPVOID param1, size_t task_number)
+	static pool::IThreadPool::TASK_RETURN __cdecl ProcessPacket(void *param0, void *param1, size_t task_number)
 	{
 		CCoreClient *_this = (CCoreClient *)param0;
 		CPacket *ppkt = (CPacket *)param1;
@@ -308,9 +308,11 @@ private:
 		}
 
 		ppkt->Release();
+
+		return pool::IThreadPool::TR_OK;
 	}
 
-	static void __cdecl PrivateDisconnect(LPVOID param0, LPVOID param1, size_t task_number)
+	static pool::IThreadPool::TASK_RETURN __cdecl PrivateDisconnect(void *param0, void *param1, size_t task_number)
 	{
 		CCoreClient *_this = (CCoreClient *)param0;
 
@@ -324,9 +326,11 @@ private:
 
 			func(_this, ET_DISCONNECTED, param);
 		}
+
+		return pool::IThreadPool::TR_OK;
 	}
 
-	static void __cdecl PrivateConnect(LPVOID param0, LPVOID param1, size_t task_number)
+	static pool::IThreadPool::TASK_RETURN __cdecl PrivateConnect(void *param0, void *param1, size_t task_number)
 	{
 		CCoreClient *_this = (CCoreClient *)param0;
 
@@ -350,6 +354,8 @@ private:
 		}
 
 		_this->m_Connected = true;
+
+		return pool::IThreadPool::TR_OK;
 	}
 
 	static DWORD WINAPI RecvThreadProc(LPVOID param)
@@ -373,13 +379,13 @@ private:
 				{
 					if (ne.lNetworkEvents & FD_CONNECT)
 					{
-						g_ThreadPool->RunTask(PrivateConnect, (LPVOID)_this);
+						g_ThreadPool->RunTask(PrivateConnect, (void *)_this);
 						break;
 					}
 
 					if (ne.lNetworkEvents & FD_CLOSE)
 					{
-						g_ThreadPool->RunTask(PrivateDisconnect, (LPVOID)_this);
+						g_ThreadPool->RunTask(PrivateDisconnect, (void *)_this);
 						break;
 					}
 
@@ -418,7 +424,7 @@ private:
 
 				if (q != SOCKET_ERROR)
 				{
-					g_ThreadPool->RunTask(ProcessPacket, (LPVOID)_this, (LPVOID)ppkt);
+					g_ThreadPool->RunTask(ProcessPacket, (void *)_this, (void *)ppkt);
 				}
 			}
 		}
