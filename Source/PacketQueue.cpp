@@ -34,23 +34,13 @@
 
 #include "PacketQueue.h"
 
-CPacketQueue::CPacketQueue(uint32_t initial_packet_count, uint32_t initial_packet_size)
+CPacketQueue::CPacketQueue(size_t initial_packet_count, uint32_t initial_packet_size)
 {
-	InitializeCriticalSection(&m_Lock);
-
 	m_DefaultPacketSize = initial_packet_size;
 	while (initial_packet_count)
 	{
 		CPacket *ppkt = new CPacket(initial_packet_size);
-
-		if (ppkt)
-		{
-			Enque(ppkt);
-		}
-		else
-		{
-			break;
-		}
+		m_Queue.push(ppkt);
 
 		initial_packet_count--;
 	}
@@ -59,59 +49,42 @@ CPacketQueue::CPacketQueue(uint32_t initial_packet_count, uint32_t initial_packe
 
 CPacketQueue::~CPacketQueue()
 {
-	while (!m_Que.empty())
+	// delete all packets
+	while (!m_Queue.empty())
 	{
-		CPacket *ppkt = (CPacket *)(m_Que.front());
-		if (ppkt)
-		{
-			delete ppkt;
-		}
-		m_Que.pop_front();
+		CPacket *ppkt = m_Queue.back();
+		delete ppkt;
+		m_Queue.pop();
 	}
-
-	DeleteCriticalSection(&m_Lock);
 }
 
 
-CPacket *CPacketQueue::Deque(BOOL create_if_empty)
+CPacket *CPacketQueue::Deque(bool create_if_empty)
 {
-	CPacket *ret = NULL;
+	std::lock_guard<std::mutex> l(m_Lock);
 
-	EnterCriticalSection(&m_Lock);
-
-	if (m_Que.empty())
+	// if the queue isn't empty, pop the front and return it
+	if (!m_Queue.empty())
 	{
-		ret = create_if_empty ? new CPacket(m_DefaultPacketSize) : NULL;
-	}
-	else
-	{
-		ret = m_Que.front();
-		m_Que.pop_front();
+		CPacket *ret = m_Queue.front();
+		m_Queue.pop();
+		return ret;
 	}
 
-	LeaveCriticalSection(&m_Lock);
-
-	return ret;
+	// the queue was empty... so either make a new packet and return it or return a nullptr
+	return (create_if_empty ? new CPacket(m_DefaultPacketSize) : nullptr);
 }
 
 
 void CPacketQueue::Enque(CPacket *ppkt)
 {
-	EnterCriticalSection(&m_Lock);
+	std::lock_guard<std::mutex> l(m_Lock);
 
-	m_Que.push_back(ppkt);
-
-	LeaveCriticalSection(&m_Lock);
+	m_Queue.push(ppkt);
 }
 
 
 bool CPacketQueue::Empty()
 {
-	return m_Que.empty();
-}
-
-
-CPacket *CPacketQueue::Front()
-{
-	return m_Que.front();
+	return m_Queue.empty();
 }

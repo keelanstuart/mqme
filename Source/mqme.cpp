@@ -113,7 +113,7 @@ ICorePacket *ICorePacket::NewPacket()
 {
 	CPacket *pkt = g_IdlePackets ? g_IdlePackets->Deque(true) : NULL;
 
-	GUID g = { 0, 0, 0,{ 0, 0, 0, 0, 0, 0, 0, 0 } };
+	GUID g = { 0 };
 	pkt->SetContext(g);
 
 	return pkt;

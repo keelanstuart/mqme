@@ -33,24 +33,24 @@
 #pragma once
 
 #include "Packet.h"
-#include <list>
+#include <mutex>
+#include <queue>
 
 class CPacketQueue
 {
 public:
-	CPacketQueue(uint32_t initial_packet_count = 0, uint32_t initial_packet_size = 0);
+	CPacketQueue(size_t initial_packet_count = 0, uint32_t initial_packet_size = 0);
 	virtual ~CPacketQueue();
 
-	CPacket *Deque(BOOL create_if_empty = false);
+	CPacket *Deque(bool create_if_empty = false);
 	void Enque(CPacket *ppkt);
 
 	bool Empty();
-	CPacket *Front();
 
 protected:
-	std::list<CPacket *> m_Que;
+	std::queue<CPacket *> m_Queue;
 
 	uint32_t m_DefaultPacketSize;
 
-	CRITICAL_SECTION m_Lock;
+	std::mutex m_Lock;
 };

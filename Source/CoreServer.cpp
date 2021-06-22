@@ -35,6 +35,7 @@
 #include <mqme.h>
 #include <ObjBase.h>
 #include <set>
+#include <mutex>
 
 #include "Packet.h"
 #include "PacketQueue.h"
@@ -87,7 +88,7 @@ public:
 		return m_GUIDSet.empty();
 	}
 
-	virtual void ForEach(EACH_GUID_FUNC func, LPVOID userdata1, LPVOID userdata2)
+	virtual void ForEach(EACH_GUID_FUNC func, void *userdata1, void *userdata2)
 	{
 		if (!func)
 			return;
@@ -123,9 +124,8 @@ protected:
 	} SConnectionInfo;
 
 	typedef std::map<GUID, SConnectionInfo, GUIDComparer> TConnectionMap;
-	typedef std::pair<GUID, SConnectionInfo> TConnectionPair;
 	TConnectionMap m_ConnectionMap;
-	CRITICAL_SECTION m_ConnectionLock;
+	std::mutex m_ConnectionLock;
 
 
 	HANDLE m_QuitEvent;
@@ -133,38 +133,35 @@ protected:
 
 	typedef struct sPacketHandlerCallInfo
 	{
-		sPacketHandlerCallInfo(PACKET_HANDLER _func, LPVOID _userdata) { func = _func; userdata = _userdata; }
+		sPacketHandlerCallInfo(PACKET_HANDLER _func, void *_userdata) { func = _func; userdata = _userdata; }
 
 		PACKET_HANDLER func;
-		LPVOID userdata;
+		void *userdata;
 	} SPacketHandlerCallInfo;
 
 	typedef std::map< FOURCHARCODE, SPacketHandlerCallInfo > TPacketHandlerMap;
-	typedef std::pair< FOURCHARCODE, SPacketHandlerCallInfo > TPacketHandlerPair;
 
 	TPacketHandlerMap m_PacketHandlerMap;
 
 	typedef struct sEventHandlerCallInfo
 	{
-		sEventHandlerCallInfo(EVENT_HANDLER _func, LPVOID _userdata) { func = _func; userdata = _userdata; }
+		sEventHandlerCallInfo(EVENT_HANDLER _func, void *_userdata) { func = _func; userdata = _userdata; }
 
 		EVENT_HANDLER func;
-		LPVOID userdata;
+		void *userdata;
 	} SEventHandlerCallInfo;
 
 	typedef std::map < EEventType, SEventHandlerCallInfo > TEventHandlerMap;
-	typedef std::pair< EEventType, SEventHandlerCallInfo > TEventHandlerPair;
 
 	TEventHandlerMap m_EventHandlerMap;
 
 	typedef std::map< GUID, CGUIDSet, GUIDComparer > TGUIDSetMap;
-	typedef std::pair< GUID, CGUIDSet > TGUIDSetPair;
 
 	TGUIDSetMap m_RoutingTable;
-	CRITICAL_SECTION m_RoutingLock;
+	std::mutex m_RoutingLock;
 
 	TGUIDSetMap m_ListeningTable;
-	CRITICAL_SECTION m_ListeningLock;
+	std::mutex m_ListeningLock;
 
 	CPacketQueue m_Outgoing;
 
@@ -184,19 +181,11 @@ public:
 		m_RecvThreadId = 0;
 
 		m_QuitEvent = WSACreateEvent();
-
-		InitializeCriticalSection(&m_ConnectionLock);
-		InitializeCriticalSection(&m_ListeningLock);
-		InitializeCriticalSection(&m_RoutingLock);
 	}
 
 	~CCoreServer()
 	{
 		StopListening();
-
-		DeleteCriticalSection(&m_ConnectionLock);
-		DeleteCriticalSection(&m_ListeningLock);
-		DeleteCriticalSection(&m_RoutingLock);
 	}
 
 	virtual void Release()
@@ -256,16 +245,14 @@ public:
 
 	virtual bool SendPacket(ICorePacket *packet)
 	{
-		CPacket *p = dynamic_cast<CPacket *>(packet);
-		if (p)
+		if (packet)
 		{
-			p->IncRef();
-			m_Outgoing.Enque(p);
+			((CPacket *)packet)->IncRef();
+			m_Outgoing.Enque((CPacket *)packet);
 
 			return true;
 		}
 
-		// You're hosed
 		return false;
 	}
 
@@ -279,27 +266,31 @@ public:
 
 		if (ret)
 		{
+			m_ListeningLock.lock();
 			TGUIDSetMap::iterator lit = m_ListeningTable.find(listener);
 			if (lit == m_ListeningTable.end())
 			{
-				std::pair<TGUIDSetMap::iterator, bool> insres = m_ListeningTable.insert(TGUIDSetPair(listener, CGUIDSet()));
+				std::pair<TGUIDSetMap::iterator, bool> insres = m_ListeningTable.insert(TGUIDSetMap::value_type(listener, CGUIDSet()));
 				if (insres.second)
 					lit = insres.first;
 			}
 
 			if (lit != m_ListeningTable.end())
 				lit->second.Add(channel);
+			m_ListeningLock.unlock();
 
+			m_RoutingLock.lock();
 			TGUIDSetMap::iterator rit = m_RoutingTable.find(channel);
 			if (rit == m_RoutingTable.end())
 			{
-				std::pair<TGUIDSetMap::iterator, bool> insres = m_RoutingTable.insert(TGUIDSetPair(channel, CGUIDSet()));
+				std::pair<TGUIDSetMap::iterator, bool> insres = m_RoutingTable.insert(TGUIDSetMap::value_type(channel, CGUIDSet()));
 				if (insres.second)
 					rit = insres.first;
 			}
 
 			if (rit != m_RoutingTable.end())
 				rit->second.Add(listener);
+			m_RoutingLock.unlock();
 		}
 
 		return ret;
@@ -307,6 +298,7 @@ public:
 
 	virtual void RemoveListenerFromChannel(GUID channel, GUID listener)
 	{
+		m_ListeningLock.lock();
 		TGUIDSetMap::iterator lit = m_ListeningTable.find(listener);
 		if (lit != m_ListeningTable.end())
 		{
@@ -314,7 +306,9 @@ public:
 			if (lit->second.Empty())
 				m_ListeningTable.erase(lit);
 		}
+		m_ListeningLock.unlock();
 
+		m_RoutingLock.lock();
 		TGUIDSetMap::iterator rit = m_RoutingTable.find(channel);
 		if (rit != m_RoutingTable.end())
 		{
@@ -322,6 +316,7 @@ public:
 			if (rit->second.Empty())
 				m_RoutingTable.erase(rit);
 		}
+		m_RoutingLock.unlock();
 	}
 
 	virtual bool GetListeners(GUID channel, IGUIDSet **listeners)
@@ -338,21 +333,21 @@ public:
 		return false;
 	}
 
-	virtual void RegisterPacketHandler(FOURCHARCODE id, PACKET_HANDLER handler, LPVOID userdata = nullptr)
+	virtual void RegisterPacketHandler(FOURCHARCODE id, PACKET_HANDLER handler, void *userdata = nullptr)
 	{
 		TPacketHandlerMap::const_iterator cit = m_PacketHandlerMap.find(id);
 		if (cit == m_PacketHandlerMap.end())
 		{
-			m_PacketHandlerMap.insert(TPacketHandlerPair(id, SPacketHandlerCallInfo(handler, userdata)));
+			m_PacketHandlerMap.insert(TPacketHandlerMap::value_type(id, SPacketHandlerCallInfo(handler, userdata)));
 		}
 	}
 
-	virtual void RegisterEventHandler(EEventType ev, EVENT_HANDLER handler, LPVOID userdata = nullptr)
+	virtual void RegisterEventHandler(EEventType ev, EVENT_HANDLER handler, void *userdata = nullptr)
 	{
 		TEventHandlerMap::const_iterator cit = m_EventHandlerMap.find(ev);
 		if (cit == m_EventHandlerMap.end())
 		{
-			m_EventHandlerMap.insert(TEventHandlerPair(ev, SEventHandlerCallInfo(handler, userdata)));
+			m_EventHandlerMap.insert(TEventHandlerMap::value_type(ev, SEventHandlerCallInfo(handler, userdata)));
 		}
 	}
 
@@ -387,12 +382,15 @@ private:
 		events[0] = _this->m_QuitEvent;
 		events[1] = WSACreateEvent();
 
+		// enable accept and close events for our socket
 		WSAEventSelect(s, events[1], FD_ACCEPT | FD_CLOSE);
 
+		// listen for connections
 		if (listen(s, 8) != SOCKET_ERROR)
 		{
 			while (true)
 			{
+				// Relinquish control until we get a new connection or we're supposed to quit
 				DWORD waitret = WSAWaitForMultipleEvents(2, events, false, INFINITE, true);
 				if (waitret == WSA_WAIT_EVENT_0)
 				{
@@ -402,11 +400,13 @@ private:
 				WSANETWORKEVENTS ne;
 				if (WSAEnumNetworkEvents(s, events[1], &ne) == 0)
 				{
+					// Was a new connection established?
 					if (ne.lNetworkEvents & FD_ACCEPT)
 					{
 						struct sockaddr_in clientaddr;
 						memset(&clientaddr, 0, sizeof(struct sockaddr_in));
 
+						// Accept it
 						int addrlen = sizeof(struct sockaddr_in);
 						SOCKET client_socket = WSAAccept(s, (sockaddr *)&clientaddr, &addrlen, NULL, NULL);
 
@@ -428,15 +428,22 @@ private:
 							cinf.addr = clientaddr;
 							cinf.sock = client_socket;
 							cinf.ev = WSACreateEvent();
+
+							// have the new connection notify us if there's data available or it is closed/lost
 							WSAEventSelect(client_socket, cinf.ev, FD_CLOSE | FD_READ);
 
-							_this->m_ConnectionMap.insert(TConnectionPair(client_guid, cinf));
+							// set up our connectioon mapping
+							_this->m_ConnectionMap.insert(TConnectionMap::value_type(client_guid, cinf));
 
-							std::pair<TGUIDSetMap::iterator, bool> rins = _this->m_RoutingTable.insert(TGUIDSetPair(client_guid, CGUIDSet()));
+							_this->m_RoutingLock.lock();
+							std::pair<TGUIDSetMap::iterator, bool> rins = _this->m_RoutingTable.insert(TGUIDSetMap::value_type(client_guid, CGUIDSet()));
 							rins.first->second.Add(client_guid);
+							_this->m_RoutingLock.unlock();
 
-							std::pair<TGUIDSetMap::iterator, bool> lins = _this->m_ListeningTable.insert(TGUIDSetPair(client_guid, CGUIDSet()));
+							_this->m_ListeningLock.lock();
+							std::pair<TGUIDSetMap::iterator, bool> lins = _this->m_ListeningTable.insert(TGUIDSetMap::value_type(client_guid, CGUIDSet()));
 							lins.first->second.Add(client_guid);
+							_this->m_ListeningLock.unlock();
 
 							// if we have a registered packet handler, then schedule it to run
 							TEventHandlerMap::iterator peit = _this->m_EventHandlerMap.find(ICoreServer::ET_CONNECT);
@@ -488,25 +495,30 @@ private:
 	{
 		CCoreServer *_this = (CCoreServer *)param;
 
+		// traverse the connection map and see if data is available
 		TConnectionMap::const_iterator it = _this->m_ConnectionMap.begin();
 		while (true)
 		{
+			// is it time to quit?
 			DWORD waitret = WaitForSingleObject(_this->m_QuitEvent, 0);
 			if (waitret == WAIT_OBJECT_0)
 				break;
 
+			// if no connections, move on
 			if (_this->m_ConnectionMap.empty())
 			{
 				Sleep(0);
 				continue;
 			}
 
+			// time to start over?
 			if (it == _this->m_ConnectionMap.end())
 				it = _this->m_ConnectionMap.begin();
 
 			HANDLE event = it->second.ev;
 			SOCKET sock = it->second.sock;
 
+			// there's no data... go to the next connection
 			waitret = WSAWaitForMultipleEvents(1, &event, false, 0, true);
 			if (waitret == WSA_WAIT_TIMEOUT)
 			{
@@ -518,6 +530,7 @@ private:
 			WSANETWORKEVENTS ne;
 			if (WSAEnumNetworkEvents(sock, event, &ne) == 0)
 			{
+				// is there data to read?
 				if (ne.lNetworkEvents & FD_READ)
 				{
 					SPacketHeader pkthdr;
@@ -551,7 +564,7 @@ private:
 
 						if (recvres != SOCKET_ERROR)
 						{
-							GUID serverguid = { 0, 0, 0,{ 0, 0, 0, 0, 0, 0, 0, 0 } };
+							GUID serverguid = { 0 };
 
 							if (pkthdr.m_Context != serverguid)
 							{
@@ -594,6 +607,9 @@ private:
 				}
 				else if (ne.lNetworkEvents & FD_CLOSE)
 				{
+					_this->m_ListeningLock.lock();
+					_this->m_RoutingLock.lock();
+
 					// find all the channels that this connection is listening to and remove it
 					// from the routing table
 					TGUIDSetMap::iterator lit = _this->m_ListeningTable.find(it->first);
@@ -607,6 +623,9 @@ private:
 
 						_this->m_ListeningTable.erase(lit);
 					}
+
+					_this->m_RoutingLock.unlock();
+					_this->m_ListeningLock.unlock();
 
 					closesocket(it->second.sock);
 					CloseHandle(it->second.ev);
