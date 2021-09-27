@@ -191,6 +191,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <XMLDocumentationFileName>
       </XMLDocumentationFileName>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>
@@ -230,6 +231,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <XMLDocumentationFileName>
       </XMLDocumentationFileName>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>
