@@ -103,7 +103,10 @@ void CPacket::SetData(FOURCHARCODE id, uint32_t datalen, const BYTE *data)
 {
 	if (!m_Buffer || (m_Buffer && (m_AllocatedDataSize < datalen)))
 	{
-		m_Buffer = realloc(m_Buffer, datalen + sizeof(SPacketHeader));
+		void *temp = realloc(m_Buffer, datalen + sizeof(SPacketHeader));
+		if (!temp)
+			throw;
+		m_Buffer = temp;
 		m_AllocatedDataSize = datalen;
 		m_Data = NULL;
 	}
