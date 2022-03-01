@@ -38,16 +38,85 @@ First, call mqme::Initialize to start things up... you have four things to decid
 * the initial maximum size of each packets
 * the number of threads per core to use for processing incoming packets
 * a modifier to the number of cores
-	
+
+```
+mqme::Initialize();
+```
+
 Next, create a client or server using either mqme::ICoreClient::NewClient() or mqme::ICoreServer::NewServer() ...
+
+```
+mqme::ICoreServer *pServer = mqme::ICoreServer::NewServer();
+```
 
 With the interface returned from one of those calls, you can register event- (think connection or disconnection) and received-packet-handling callbacks.
 
+```
+mqme::ICoreServer *pServer = mqme::ICoreServer::NewServer();
+
+pServer->RegisterPacketHandler('HELO', [](mqme::ICoreServer *server, mqme::ICorePacket *packet, LPVOID userdata) -> bool
+{
+	// read authentication data from the packet... for simplicity's sake, assume the connection is valid
+
+	// handle a 'HELO' message (signs in)
+	auto pp = mqme::ICorePacket::NewPacket();
+	if (pp)
+	{
+		pp->SetContext(packet->GetSender());
+		pp->SetData('HIYA', 0, nullptr);
+		server->SendPacket(pp);
+	}
+	return true;
+}, nullptr);
+
+pServer->RegisterPacketHandler('JOIN', [](mqme::ICoreServer *server, mqme::ICorePacket *packet, LPVOID userdata) -> bool
+{
+	// handle a 'JOIN' message (joins a room)
+	server->AddListenerToChannel(packet->GetContext(), packet->GetSender());
+	return true;
+}, nullptr);
+
+pServer->RegisterPacketHandler('QUIT', [](mqme::ICoreServer *server, mqme::ICorePacket *packet, LPVOID userdata) -> bool
+{
+	// handle a 'QUIT' message (quits a room)
+	server->RemoveListenerFromChannel(packet->GetContext(), packet->GetSender());
+	return true;
+}, nullptr);
+
+pServer->RegisterEventHandler(mqme::ICoreServer::ET_CONNECT, [](mqme::ICoreServer *server, mqme::ICoreServer::EEventType ev, GUID g, LPVOID userdata) -> bool
+{
+	// do whatever you do when a new connection is made
+}, nullptr);
+
+pServer->RegisterEventHandler(mqme::ICoreServer::ET_DISCONNECT, [](mqme::ICoreServer *server, mqme::ICoreServer::EEventType ev, GUID g, LPVOID userdata) -> bool
+{
+	// do whatever you do when a connection is closed
+}, nullptr);
+```
+
 After that, call StartListening (mqme::ICoreServer) or Connect (mqme::ICoreClient) and your callbacks are active. When an event occurs or a packet is received, your code will be run.
+
+```
+if (pServer->StartListening(12345))
+{
+	// handle events until you want to shut down
+	...
+```
+
+With that, you now have a server that's capable of routing messages to channel participants.
 
 When you want to send data, call mqme::ICorePacket::NewPacket() to get a packet from the cache. On the returned interface, call mqme::ICorePacket's SetContext and SetData members, then SendPacket (on either mqme::ICoreClient or mqme::ICoreServer). When sending a packet, there is no need to Release it -- the internals will do that automatically. When receiving a packet, you must call it's Release method after you are done examining it.
 
+
 When you're all done, call Disconnect (mqme::ICoreClient) or StopListening (mqme::ICoreServer), followed by mqme::Close().
+
+```
+	...
+	pServer->StopListening();
+}
+
+pServer->Release();
+```
 
 
 ****
