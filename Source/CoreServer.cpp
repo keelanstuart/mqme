@@ -474,22 +474,6 @@ private:
 	}
 
 
-	static  pool::IThreadPool::TASK_RETURN __cdecl ProcessPacket(void *param0, void *param1, size_t task_number)
-	{
-		CCoreServer *_this = (CCoreServer *)param0;
-		CPacket *ppkt = (CPacket *)param1;
-
-		// look up the packet handler and call it with the appropriate parameters
-		TPacketHandlerMap::iterator it = _this->m_PacketHandlerMap.find(ppkt->GetID());
-		if (it != _this->m_PacketHandlerMap.end())
-		{
-			it->second.func(_this, ppkt, it->second.userdata);
-		}
-
-		ppkt->Release();
-
-		return pool::IThreadPool::TR_OK;
-	}
 
 	static DWORD WINAPI RecvThreadProc(void *param)
 	{
@@ -589,7 +573,19 @@ private:
 							// if we have a registered packet handler, then schedule it to run
 							TPacketHandlerMap::iterator phit = _this->m_PacketHandlerMap.find(ppkt->GetID());
 							if (phit != _this->m_PacketHandlerMap.end())
-								g_ThreadPool->RunTask(ProcessPacket, (void *)_this, (void *)ppkt);
+								g_ThreadPool->RunTask([&_this, &ppkt](size_t task_number)
+								{
+									// look up the packet handler and call it with the appropriate parameters
+									TPacketHandlerMap::iterator it = _this->m_PacketHandlerMap.find(ppkt->GetID());
+									if (it != _this->m_PacketHandlerMap.end())
+									{
+										it->second.func(_this, ppkt, it->second.userdata);
+									}
+
+									ppkt->Release();
+
+									return pool::IThreadPool::TR_OK;
+								});
 						}
 					}
 					else switch (WSAGetLastError())

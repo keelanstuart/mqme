@@ -295,68 +295,6 @@ public:
 	}
 
 private:
-	static pool::IThreadPool::TASK_RETURN __cdecl ProcessPacket(void *param0, void *param1, size_t task_number)
-	{
-		CCoreClient *_this = (CCoreClient *)param0;
-		CPacket *ppkt = (CPacket *)param1;
-
-		// look up the packet handler and call it with the appropriate parameters
-		TPacketHandlerMap::iterator it = _this->m_PacketHandlerMap.find(ppkt->GetID());
-		if (it != _this->m_PacketHandlerMap.end())
-		{
-			it->second.func(_this, ppkt, it->second.userdata);
-		}
-
-		ppkt->Release();
-
-		return pool::IThreadPool::TR_OK;
-	}
-
-	static pool::IThreadPool::TASK_RETURN __cdecl PrivateDisconnect(void *param0, void *param1, size_t task_number)
-	{
-		CCoreClient *_this = (CCoreClient *)param0;
-
-		_this->Disconnect();
-
-		TEventHandlerMap::const_iterator it = _this->m_EventHandlerMap.find(ET_DISCONNECTED);
-		if (it != _this->m_EventHandlerMap.cend())
-		{
-			EVENT_HANDLER func = it->second.func;
-			LPVOID param = it->second.userdata;
-
-			func(_this, ET_DISCONNECTED, param);
-		}
-
-		return pool::IThreadPool::TR_OK;
-	}
-
-	static pool::IThreadPool::TASK_RETURN __cdecl PrivateConnect(void *param0, void *param1, size_t task_number)
-	{
-		CCoreClient *_this = (CCoreClient *)param0;
-
-		WSABUF buf;
-		DWORD flags = 0;
-		DWORD ct = 0;
-		int q;
-
-		// the first thing a client sends to a server upon connection is it's GUID
-		buf.buf = (char *)&_this->m_GUID;
-		buf.len = sizeof(GUID);
-		q = WSASend(_this->m_Socket, &buf, 1, &ct, 0, NULL, NULL);
-
-		TEventHandlerMap::const_iterator it = _this->m_EventHandlerMap.find(ET_CONNECTED);
-		if (it != _this->m_EventHandlerMap.cend())
-		{
-			EVENT_HANDLER func = it->second.func;
-			LPVOID param = it->second.userdata;
-
-			func(_this, ET_CONNECTED, param);
-		}
-
-		_this->m_Connected = true;
-
-		return pool::IThreadPool::TR_OK;
-	}
 
 	static DWORD WINAPI RecvThreadProc(LPVOID param)
 	{
@@ -379,13 +317,51 @@ private:
 				{
 					if (ne.lNetworkEvents & FD_CONNECT)
 					{
-						g_ThreadPool->RunTask(PrivateConnect, (void *)_this);
+						g_ThreadPool->RunTask([&_this](size_t task_number)
+						{
+							WSABUF buf;
+							DWORD flags = 0;
+							DWORD ct = 0;
+							int q;
+
+							// the first thing a client sends to a server upon connection is it's GUID
+							buf.buf = (char *)&(_this->m_GUID);
+							buf.len = sizeof(GUID);
+							q = WSASend(_this->m_Socket, &buf, 1, &ct, 0, NULL, NULL);
+
+							TEventHandlerMap::const_iterator it = _this->m_EventHandlerMap.find(ET_CONNECTED);
+							if (it != _this->m_EventHandlerMap.cend())
+							{
+								EVENT_HANDLER func = it->second.func;
+								LPVOID param = it->second.userdata;
+
+								func(_this, ET_CONNECTED, param);
+							}
+
+							_this->m_Connected = true;
+
+							return pool::IThreadPool::TR_OK;
+						});
 						break;
 					}
 
 					if (ne.lNetworkEvents & FD_CLOSE)
 					{
-						g_ThreadPool->RunTask(PrivateDisconnect, (void *)_this);
+						g_ThreadPool->RunTask([&_this](size_t task_number)
+						{
+							_this->Disconnect();
+
+							TEventHandlerMap::const_iterator it = _this->m_EventHandlerMap.find(ET_DISCONNECTED);
+							if (it != _this->m_EventHandlerMap.cend())
+							{
+								EVENT_HANDLER func = it->second.func;
+								LPVOID param = it->second.userdata;
+
+								func(_this, ET_DISCONNECTED, param);
+							}
+
+							return pool::IThreadPool::TR_OK;
+						});
 						break;
 					}
 
@@ -424,7 +400,19 @@ private:
 
 				if (q != SOCKET_ERROR)
 				{
-					g_ThreadPool->RunTask(ProcessPacket, (void *)_this, (void *)ppkt);
+					g_ThreadPool->RunTask([&_this, &ppkt](size_t task_number)
+					{
+						// look up the packet handler and call it with the appropriate parameters
+						TPacketHandlerMap::iterator it = _this->m_PacketHandlerMap.find(ppkt->GetID());
+						if (it != _this->m_PacketHandlerMap.end())
+						{
+							it->second.func(_this, ppkt, it->second.userdata);
+						}
+
+						ppkt->Release();
+
+						return pool::IThreadPool::TR_OK;
+					});
 				}
 			}
 		}
