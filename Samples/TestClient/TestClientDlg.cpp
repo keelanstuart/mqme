@@ -14,6 +14,8 @@
 
 // CTestClientDlg dialog
 
+constexpr UINT WM_MQME_DISCONNECTED = WM_APP + 1;
+constexpr UINT WM_MQME_CONNECTED    = WM_APP + 2;
 
 
 CTestClientDlg::CTestClientDlg(CWnd* pParent /*=NULL*/)
@@ -38,56 +40,10 @@ BEGIN_MESSAGE_MAP(CTestClientDlg, CDialogEx)
 	ON_WM_QUERYDRAGICON()
 	ON_BN_CLICKED(IDC_CONNECT, &CTestClientDlg::OnBnClickedConnect)
 	ON_BN_CLICKED(IDC_SEND, &CTestClientDlg::OnBnClickedSend)
+	ON_MESSAGE(WM_MQME_CONNECTED, &CTestClientDlg::OnConnected)
+	ON_MESSAGE(WM_MQME_DISCONNECTED, &CTestClientDlg::OnDisconnected)
 END_MESSAGE_MAP()
 
-
-// CTestClientDlg message handlers
-
-bool CTestClientDlg::HandlePacket(mqme::ICoreClient *client, mqme::ICorePacket *packet, LPVOID userdata)
-{
-	CTestClientDlg *_this = (CTestClientDlg *)userdata;
-
-	switch (packet->GetID())
-	{
-		case 'HIYA':
-		{
-			MessageBeep(MB_OK);
-			_this->AppendLog(_T("Server responded; joining test channel..."), RGB(0, 0, 0), false, false);
-
-			mqme::ICorePacket *pp = mqme::ICorePacket::NewPacket();
-			if (pp)
-			{
-				GUID g;
-				memset(&g, 0, sizeof(GUID));
-				g.Data1 = 123;
-
-				pp->SetContext(g);
-				pp->SetData('JOIN', 0, nullptr);
-				client->SendPacket(pp);
-			}
-			break;
-		}
-
-		case 'TEXT':
-			_this->AppendLog((TCHAR *)(packet->GetData()), RGB(0, 0, 0), false, false);
-			break;
-	}
-
-	return true;
-}
-
-bool CTestClientDlg::HandleEvent(mqme::ICoreClient *client, mqme::ICoreClient::EEventType ev, LPVOID userdata)
-{
-	CTestClientDlg *_this = (CTestClientDlg *)userdata;
-
-	switch (ev)
-	{
-		case mqme::ICoreClient::ET_DISCONNECTED:
-			_this->AppendLog(_T("Disconnected"), RGB(0, 0, 0), false, false);
-			break;
-	}
-	return true;
-}
 
 BOOL CTestClientDlg::OnInitDialog()
 {
@@ -106,14 +62,58 @@ BOOL CTestClientDlg::OnInitDialog()
 		m_edInput.SetWindowText(_T("This is a test message."));
 	m_btnSend.SubclassDlgItem(IDC_SEND, this);
 
-	m_pClient = mqme::ICoreClient::NewClient();
+	m_Me = mqme::GenerateChannel();
+	m_pClient = mqme::IClient::NewClient();
 	if (!m_pClient)
 		return FALSE;
 
-	m_pClient->RegisterPacketHandler('HIYA', HandlePacket, (LPVOID)this);
-	m_pClient->RegisterPacketHandler('TEXT', HandlePacket, (LPVOID)this);
+	mqme::IClient::PACKET_HANDLER HandlePacket = [this](mqme::IClient *client, mqme::IPacket *packet)
+	{
+		switch (packet->GetID())
+		{
+			case 'HIYA':
+			{
+				mqme::IPacket *pp = mqme::IPacket::NewPacket();
+				if (pp)
+				{
+					mqme::channel_t g = {0};
+					g.m_GuidBytes[0] = 123;
 
-	m_pClient->RegisterEventHandler(mqme::ICoreClient::ET_DISCONNECTED, HandleEvent, (LPVOID)this);
+					pp->SetContext(g);
+					pp->SetData('JOIN', 0, nullptr);
+					client->SendPacket(pp);
+				}
+				break;
+			}
+
+			case 'TEXT':
+				AppendLog((TCHAR *)(packet->GetData()), RGB(80, 80, 128), false, false);
+				break;
+		}
+
+		return true;
+	};
+
+	m_pClient->RegisterPacketHandler('HIYA', HandlePacket);
+	m_pClient->RegisterPacketHandler('TEXT', HandlePacket);
+
+	mqme::IClient::EVENT_HANDLER HandleEvent = [this](mqme::IClient *client, mqme::IClient::EventType ev)
+	{
+		switch (ev)
+		{
+			case mqme::IClient::EventType::CONNECTED:
+				PostMessage(WM_MQME_CONNECTED);
+				break;
+
+			case mqme::IClient::EventType::DISCONNECTED:
+				PostMessage(WM_MQME_DISCONNECTED);
+				break;
+		}
+		return true;
+	};
+
+	m_pClient->RegisterEventHandler(mqme::IClient::EventType::CONNECTED, HandleEvent);
+	m_pClient->RegisterEventHandler(mqme::IClient::EventType::DISCONNECTED, HandleEvent);
 
 	return TRUE;  // return TRUE  unless you set the focus to a control
 }
@@ -168,8 +168,8 @@ void CTestClientDlg::AppendLog(const TCHAR *text, COLORREF color, bool bold, boo
 	t += text;
 
 	cf.cbSize = sizeof(cf);
-	cf.dwMask = CFM_BOLD | CFM_ITALIC | CFM_COLOR;
-	cf.dwEffects = (bold ? CFE_BOLD : 0) | (italic ? CFE_ITALIC : 0) & ~CFE_AUTOCOLOR;
+	//cf.dwMask = CFM_BOLD | CFM_ITALIC | CFM_COLOR;
+	//cf.dwEffects = (bold ? CFE_BOLD : 0) | (italic ? CFE_ITALIC : 0) & ~CFE_AUTOCOLOR;
 	cf.crTextColor = color;
 
 	m_edLog.SetSel(txtlen, -1);
@@ -187,28 +187,23 @@ void CTestClientDlg::OnBnClickedConnect()
 {
 	if (m_pClient)
 	{
+		// disable the connect button first
+		// it'll be re-enabled when we either connect or disconnect via event callback
+		m_btnConnect.EnableWindow(false);
+
 		if (m_pClient->IsConnected())
 		{
-			m_btnConnect.EnableWindow(false);
 			m_pClient->Disconnect();
-			if (!m_pClient->IsConnected())
-			{
-				m_btnConnect.SetWindowText(_T("Connect"));
-				m_btnConnect.EnableWindow(true);
-				m_edAddr.EnableWindow(true);
-			}
 		}
 		else
 		{
-			CString addr;
-			m_edAddr.GetWindowText(addr);
-			if (m_pClient->Connect((LPCTSTR)addr, 12345))
-			{
-				m_edAddr.EnableWindow(false);
-				m_btnConnect.SetWindowText(_T("Disconnect"));
-				AppendLog(_T("Connected"), RGB(0, 0, 0), false, false);
+			CString addr_;
+			m_edAddr.GetWindowText(addr_);
+			CStringA addr = CW2A(addr_);
 
-				mqme::ICorePacket *pp = mqme::ICorePacket::NewPacket();
+			if (m_pClient->Connect((LPCSTR)addr, 12345, &m_Me))
+			{
+				mqme::IPacket *pp = mqme::IPacket::NewPacket();
 				if (pp)
 				{
 					pp->SetData('HELO', 0, nullptr);
@@ -222,7 +217,6 @@ void CTestClientDlg::OnBnClickedConnect()
 
 void CTestClientDlg::OnOK()
 {
-//	CDialogEx::OnOK();
 }
 
 
@@ -239,18 +233,42 @@ void CTestClientDlg::OnBnClickedSend()
 	if (t.IsEmpty())
 		return;
 
-//	if (!m_pClient->IsConnected())
-//		return;
+	AppendLog(t, RGB(0, 0, 0), false, false);
 
-	mqme::ICorePacket *pp = mqme::ICorePacket::NewPacket();
+	mqme::IPacket *pp = mqme::IPacket::NewPacket();
 	if (pp)
 	{
-		GUID g;
-		memset(&g, 0, sizeof(GUID));
-		g.Data1 = 123;
+		mqme::channel_t g = {0};
+		g.m_GuidBytes[0] = 123;
 
 		pp->SetContext(g);
 		pp->SetData('TEXT', (t.GetLength() + 1) * sizeof(TCHAR), (BYTE *)((LPCTSTR)t));
 		m_pClient->SendPacket(pp);
 	}
+}
+
+
+LRESULT CTestClientDlg::OnConnected(WPARAM wparam, LPARAM lparam)
+{
+	AppendLog(_T("Connected"), RGB(80, 128, 80), false, true);
+
+	m_btnSend.EnableWindow();
+	m_edAddr.EnableWindow(FALSE);
+	m_btnConnect.SetWindowText(_T("Disconnect"));
+	m_btnConnect.EnableWindow();
+
+	return 0;
+}
+
+
+LRESULT CTestClientDlg::OnDisconnected(WPARAM wparam, LPARAM lparam)
+{
+	AppendLog(_T("Disonnected"), RGB(128, 80, 80), false, true);
+
+	m_btnSend.EnableWindow(FALSE);
+	m_edAddr.EnableWindow();
+	m_btnConnect.SetWindowText(_T("Connect"));
+	m_btnConnect.EnableWindow();
+
+	return 0;
 }

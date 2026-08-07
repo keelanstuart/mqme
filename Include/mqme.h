@@ -32,245 +32,311 @@
 
 #pragma once
 
-#include <stdint.h>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <functional>
+
+#if defined(_WIN32)
 #include <guiddef.h>
+#endif
 
 
-#ifdef MQME_EXPORTS
+#if defined(_WIN32) && !defined(MQME_STATIC)
+
+#if defined(MQME_EXPORTS)
 #define MQME_API __declspec(dllexport)
 #else
 #define MQME_API __declspec(dllimport)
+#endif
+
+#elif defined(__GNUC__) && !defined(MQME_STATIC)
+
+#define MQME_API __attribute__((visibility("default")))
+
+#else
+
+#define MQME_API
+
 #endif
 
 
 namespace mqme
 {
 
-typedef uint32_t FOURCHARCODE;
+	using FOURCHARCODE = std::uint32_t;
 
 
-/// Initializes the mqme library
-/// initial_idle_packet_count dictates how many packets of initial_packet_size will
-/// be created and waiting to be used. If a larger size is needed, that packet is resized.
-/// If more packets are required, more will be created at that time.
-/// mqme uses a pool of worker threads to process incoming packets - the number of threads
-/// available to mqme is controllable by setting the number of threads per core and an
-/// additive modifier to that number of cores 
-MQME_API bool Initialize(UINT initial_idle_packet_count = 256, UINT initial_packet_size = 4096, UINT threads_per_core = 1, INT core_count_adjustment = -2);
-
-
-/// Closes the mqme library
-MQME_API void Close();
-
-
-/// ICorePacket interface -- allows user code to safely access arriving data
-/// or to fill out data to be sent.  Notification callbacks will provide a
-/// pointer to this interface type.
-class ICorePacket
-{
-public:
-
-	/// Releases the packet when you are done using it
-	virtual void Release() = NULL;
-
-	/// Sets the recipient of the packet (for routing)
-	virtual void SetContext(GUID context) = NULL;
-
-	/// Gets the context GUID
-	virtual GUID GetContext() = NULL;
-
-	/// Gets the GUID of the sender
-	/// Note: set under the covers when a packet is sent
-	virtual GUID GetSender() = NULL;
-
-	/// Sets the id, data length, and the actual data in the packet
-	/// Note: this copies the memory provided into private storage
-	/// Also note: zero-length packets are just fine
-	virtual void SetData(FOURCHARCODE id, uint32_t datalen, const BYTE *data) = NULL;
-
-	/// Returns the packet identifier
-	virtual FOURCHARCODE GetID() = NULL;
-
-	/// Returns the length of the data stored in this packet
-	virtual uint32_t GetDataLength() = NULL;
-
-	/// Returns a pointer to the physical data stored in this packet
-	virtual BYTE *GetData() = NULL;
-
-	/// Returns an ICorePacket interface
-	/// It should be noted that packets are globally managed
-	/// and will be recycled when Released, so
-	/// it is important to fill them out entirely
-	/// before using them!
-	MQME_API static ICorePacket *NewPacket();
-};
-
-
-/// IGUIDSet is a set of GUIDs that is used for routing packets appropriately. An instance of
-/// ICoreServer will maintain listener data per-channel and it can be modified with this interface.
-class IGUIDSet
-{
-public:
-	/// Adds the given GUID to the set
-	virtual void Add(GUID id) = NULL;
-
-	/// Removes the given GUID from the set
-	virtual void Remove(GUID id) = NULL;
-
-	/// Returns true if the set contains the given GUID, false if it does not.
-	virtual bool Contains(GUID id) = NULL;
-
-	/// Returns the number of elements in the set
-	virtual size_t Size() = NULL;
-
-	/// Returns true if the set if empty, false if there is anything in it
-	virtual bool Empty() = NULL;
-
-	/// A parameter to the ForEach function; will be called for each GUID in the set
-	typedef void(__cdecl *EACH_GUID_FUNC)(GUID id, void *userdata1, void *userdata2);
-
-	/// Calls the given user-defined function back for each GUID in the set. Passes it userdata1 and userdata2
-	virtual void ForEach(EACH_GUID_FUNC func, void *userdata1 = nullptr, void *userdata2 = nullptr) = NULL;
-};
-
-
-/// ICoreServer interface -- listens for incoming ICoreClient connections over TCP and
-/// then provides routing capability for packets, forwarding them to other clients
-/// in the same channel. AddListenerToChannel is called to add a given client to a channel,
-/// but it is up to the server implementation to determine how and when to do that (the
-/// TestServer / TestClient sample applications make a 'JOIN' request). Additionally,
-/// the server can process packets of certain types and do whatever they want with the data
-/// therein.
-class ICoreServer
-{
-public:
-
-	enum EEventType
+	struct channel_t
 	{
-		ET_NONE = 0,
+#pragma pack(push, 1)
 
-		ET_CONNECT,			/// a new client has connected
-		ET_DISCONNECT,		/// a client has disconnected
+		union
+		{
+			uint8_t m_GuidBytes[16];
 
-		ET_NUMEVENTS
+#if defined(_WIN32)
+			GUID m_Guid;
+#endif
+		};
+
+#pragma pack(pop)
+
+	    bool operator ==(const channel_t &other) const
+    	{
+        	return std::memcmp(m_GuidBytes, other.m_GuidBytes, sizeof(m_GuidBytes)) == 0;
+	    }
+
+	    bool operator !=(const channel_t &other) const
+		{
+			return !(*this == other);
+		}
+
+	    bool operator <(const channel_t &other) const
+	    {
+    	    return std::memcmp(m_GuidBytes, other.m_GuidBytes, sizeof(m_GuidBytes)) < 0;
+	    }
+
 	};
 
-	/// PACKET_HANDLER is a callback function provided by the user
-	/// that will be called when a packet matching the type given in the
-	/// ICoreServer::RegisterHandler arrives.  This callback will be given
-	/// the ICoreServer interface which received the data, the packet itself, and
-	/// the client from which the packet arrived
-	typedef bool (__cdecl *PACKET_HANDLER)(ICoreServer *server, ICorePacket *packet, LPVOID userdata);
-
-	/// The EVENT_HANDLER is a callback function provided by the user
-	/// that will be called when an event specified in the ICoreServer::EEventType
-	/// occurs.
-	typedef bool (__cdecl *EVENT_HANDLER)(ICoreServer *server, EEventType ev, GUID generator, LPVOID userdata);
-
-	/// Releases the server, implicitly calling StopListening
-	virtual void Release() = NULL;
-
-	/// Starts listening (and everything that entails) on the given
-	/// port number, waiting for incoming connections and
-	/// receiving and routing packets.
-	virtual bool StartListening(uint16_t port) = NULL;
-
-	/// Stops the server from operating, freeing all memory
-	/// allocated by the server, stopping all threads, etc.
-	virtual bool StopListening() = NULL;
-
-	/// Sends a packet.
-	/// NOTE: once a packet has been sent, it should not be modified
-	virtual bool SendPacket(ICorePacket *packet) = NULL;
-
-	/// This will add a connection to the routing table for the given channel.
-	/// After this is called, packets sent to the channel will be sent to the listener
-	virtual bool AddListenerToChannel(GUID channel, GUID listener) = NULL;
-
-	/// This will add a connection to the routing table for the given channel.
-	/// After this is called, packets sent to the channel will be sent to the listener
-	virtual void RemoveListenerFromChannel(GUID channel, GUID listener) = NULL;
-
-	/// Populates a set with the current listeners on a given channel
-	virtual bool GetListeners(GUID channel, IGUIDSet **listeners) = NULL;
-
-	/// Registers an incoming packet handling callback with the server.
-	/// When a packet with the given id arrives, this callback
-	/// will be executed.
-	/// NOTE: packets will still be routed to their given context, even if no
-	/// handler has been registered with the server
-	virtual void RegisterPacketHandler(FOURCHARCODE id, PACKET_HANDLER handler, LPVOID userdata = nullptr) = NULL;
-
-	/// Registers an event handling callback with the server.
-	virtual void RegisterEventHandler(EEventType ev, EVENT_HANDLER handler, LPVOID userdata = nullptr) = NULL;
-
-	/// Instantiates a new server object
-	MQME_API static ICoreServer *NewServer();
-};
+	static_assert(sizeof(channel_t) == 16, "channel_t must be 16 bytes");
 
 
-/// ICoreClient interface -- Connects to ICoreServer instances, subsequently sending and
-/// receiving packets therefrom.
-class ICoreClient
-{
-public:
+	// Initializes the mqme library
+	// initial_idle_packet_count dictates how many packets of initial_packet_size will
+	// be created and waiting to be used. If a larger size is needed, that packet is resized.
+	// If more packets are required, more will be created at that time.
+	// mqme uses a pool of worker threads to process incoming packets - the number of threads
+	// available to mqme is controllable by setting the number of threads per core and an
+	// additive modifier to that number of cores 
+	MQME_API bool Initialize(
+		size_t initial_idle_packet_count = 256,
+		size_t initial_packet_size = 4096,
+        size_t threads_per_core = 1,
+		int core_count_adjustment = -2);
 
-	enum EEventType
+	// Closes the mqme library
+	MQME_API void Close();
+
+	// Generates a new channel identifier
+	MQME_API channel_t GenerateChannel();
+
+	// Returns whether or not the channel is "null" (generally refers to the server)
+	MQME_API channel_t NullChannel();
+
+
+	// IPacket interface -- allows user code to safely access arriving data
+	// or to fill out data to be sent.  Notification callbacks will provide a
+	// pointer to this interface type.
+	class IPacket
 	{
-		ET_NONE = 0,
 
-		ET_CONNECTED,			/// this client has been connected
-		ET_DISCONNECTED,		/// this client has been disconnected
+	public:
 
-		ET_NUMEVENTS
+		// Releases the packet when you are done using it
+	    virtual void Release() = 0;
+
+		// Sets the id, data length, and the actual data in the packet
+		// Note: this copies the memory provided into private storage
+		// Also note: zero-length packets are just fine
+		virtual void SetData(FOURCHARCODE id, size_t datalen, const void* data) = 0;
+
+		// Sets the recipient of the packet (for routing)
+    	virtual void SetContext(channel_t context) = 0;
+
+		// Gets the channel
+    	virtual channel_t GetContext() const = 0;
+
+		// Gets the channel of the sender
+		// Note: set under the covers when a packet is sent
+	    virtual channel_t GetSender() const = 0;
+
+		// Returns the packet identifier
+    	virtual FOURCHARCODE GetID() const = 0;
+
+		// Returns the length of the data stored in this packet
+	    virtual size_t GetDataLength() const = 0;
+
+		// Returns a pointer to the physical data stored in this packet
+	    virtual const uint8_t *GetData() const = 0;
+
+		// Returns an IPacket interface
+		// It should be noted that packets are globally managed
+		// and will be recycled when Released, so
+		// it is important to fill them out entirely
+		// before using them!
+	    MQME_API static IPacket *NewPacket();
+
 	};
 
-	/// The PACKET_HANDLER is a callback function provided by the user
-	/// that will be called when a packet matching the type given in the
-	/// ICoreClient::RegisterPacketHandler arrives.  This callback will be given
-	/// the ICoreClient interface which received the data and the packet itself.
-	typedef bool (__cdecl *PACKET_HANDLER)(ICoreClient *client, ICorePacket *packet, LPVOID userdata);
 
-	/// The EVENT_HANDLER is a callback function provided by the user
-	/// that will be called when an event specified in the ICoreClient::EEventType
-	/// occurs.
-	typedef bool(__cdecl *EVENT_HANDLER)(ICoreClient *client, EEventType ev, LPVOID userdata);
+	class IChannelSet
+	{
 
-	/// Releases the client, implicitly calling Disconnect
-	/// WARNING: Once the client has been released, do not
-	/// attempt to call any member functions.
-	virtual void Release() = NULL;
+	public:
 
-	/// Attempts to connect to the given server address
-	/// If myid is null, a new GUID will be generated and sent to the server - 
-	/// this allows a client to connect with a previously used GUID
-	virtual bool Connect(const TCHAR *address, uint16_t port, GUID *my_id = nullptr) = NULL;
+		// Adds a channel to the set
+		virtual void Add(channel_t id) = 0;
 
-	/// Returns the ID that was provided to, or generated by, the call to Connect
-	/// Useful to persist connection identity
-	virtual GUID GetID() = NULL;
+		// Removes a channel from the set
+		virtual void Remove(channel_t id) = 0;
 
-	/// Disconnects from the server, if connected
-	virtual void Disconnect() = NULL;
+		// Returns true if the set contains the given channel, false if it does not.
+		virtual bool Contains(channel_t id) const = 0;
 
-	/// Returns the state of connection
-	virtual bool IsConnected() = NULL;
+		// Returns the number of channels in the set
+		virtual size_t Size() const = 0;
 
-	/// Sends a packet.
-	/// NOTE: once a packet has been sent, it should not be modified
-	virtual bool SendPacket(ICorePacket *packet) = NULL;
+		// Returns true if the set if empty, false if there is anything in it
+		virtual bool Empty() const = 0;
 
-	/// Registers an incoming packet handling callback with the client.
-	/// When a packet with the given id arrives, this callback
-	/// will be executed.
-	virtual void RegisterPacketHandler(FOURCHARCODE id, PACKET_HANDLER handler, LPVOID userdata = nullptr) = NULL;
+		// A parameter to the ForEach function; will be called for each channel in the set
+		using PerChannelFunc = std::function<void(channel_t)>;
+ 
+		// Calls the given user-defined function back for each channel_t in the set. Passes it userdata1 and userdata2
+    	virtual void ForEach(PerChannelFunc func) const = 0;
 
-	/// Registers an event handling callback with the client.
-	virtual void RegisterEventHandler(EEventType ev, EVENT_HANDLER handler, LPVOID userdata = nullptr) = NULL;
+	};
 
-	/// Instantiates a new client object
-	MQME_API static ICoreClient *NewClient();
+
+	// IServer interface -- listens for incoming IClient connections over TCP and
+	// then provides routing capability for packets, forwarding them to other clients
+	// in the same channel. AddListenerToChannel is called to add a given client to a channel,
+	// but it is up to the server implementation to determine how and when to do that (the
+	// TestServer / TestClient sample applications make a 'JOIN' request). Additionally,
+	// the server can process packets of certain types and do whatever they want with the data
+	// therein.
+	class IServer
+	{
+
+	public:
+
+		using EventType = enum
+		{
+			NONE = 0,
+
+			CONNECT,			// a new client has connected
+			DISCONNECT,			// a client has disconnected
+
+			NUMEVENTS
+		};
+
+		// PACKET_HANDLER is a callback function provided by the user
+		// that will be called when a packet matching the type given in the
+		// IServer::RegisterHandler arrives.  This callback will be given
+		// the IServer interface which received the data, the packet itself, and
+		// the client from which the packet arrived
+	    using PACKET_HANDLER = std::function<bool(IServer *, IPacket *)>;
+
+		// The EVENT_HANDLER is a callback function provided by the user
+		// that will be called when an event specified in the IServer::EEventType
+		// occurs.
+    	using EVENT_HANDLER = std::function<bool(IServer *, EventType, channel_t)>;
+
+		// Releases the server, implicitly calling StopListening
+	    virtual void Release() = 0;
+
+		// Starts listening (and everything that entails) on the given
+		// port number, waiting for incoming connections and
+		// receiving and routing packets.
+    	virtual bool StartListening(std::uint16_t port) = 0;
+
+		// Stops the server from operating, freeing all memory
+		// allocated by the server, stopping all threads, etc.
+	    virtual bool StopListening() = 0;
+
+		// Sends a packet.
+		// NOTE: once a packet has been sent, it should not be modified
+	    virtual bool SendPacket(IPacket *packet) = 0;
+
+		// This will add a connection to the routing table for the given channel.
+		// After this is called, packets sent to the channel will be sent to the listener
+	    virtual bool AddListenerToChannel(channel_t channel, channel_t listener) = 0;
+
+		// This will add a connection to the routing table for the given channel.
+		// After this is called, packets sent to the channel will be sent to the listener
+	    virtual void RemoveListenerFromChannel(channel_t channel, channel_t listener) = 0;
+
+		// Populates a set with the current listeners on a given channel
+    	virtual bool GetListeners(channel_t channel, IChannelSet **listeners) = 0;
+		// Registers an incoming packet handling callback with the server.
+		// When a packet with the given id arrives, this callback
+		// will be executed.
+		// NOTE: packets will still be routed to their given context, even if no
+		// handler has been registered with the server
+	    virtual void RegisterPacketHandler(FOURCHARCODE id, PACKET_HANDLER handler) = 0;
+		// Registers an event handling callback with the server.
+	    virtual void RegisterEventHandler(EventType ev, EVENT_HANDLER handler) = 0;
+
+		// Instantiates a new server object
+    	MQME_API static IServer *NewServer();
+
+	};
+
+
+	// IClient interface -- Connects to IServer instances, subsequently sending and
+	// receiving packets therefrom.
+	class IClient
+	{
+	
+	public:
+
+		using EventType = enum
+		{
+			NONE = 0,
+
+			CONNECTED,			// this client has been connected
+			DISCONNECTED,		// this client has been disconnected
+
+			NUMEVENTS
+		};
+
+		// The PACKET_HANDLER is a callback function provided by the user
+		// that will be called when a packet matching the type given in the
+		// IClient::RegisterPacketHandler arrives.  This callback will be given
+		// the IClient interface which received the data and the packet itself.
+		using PACKET_HANDLER = std::function<bool(IClient *, IPacket *)>;
+
+		// The EVENT_HANDLER is a callback function provided by the user
+		// that will be called when an event specified in the IClient::EEventType
+		// occurs.
+    	using EVENT_HANDLER = std::function<bool(IClient *, EventType)>;
+
+		// Releases the client, implicitly calling Disconnect
+		// WARNING: Once the client has been released, do not
+		// attempt to call any member functions.
+	    virtual void Release() = 0;
+		// Attempts to connect to the given server address
+		// If myid is null, a new channel_t will be generated and sent to the server - 
+		// this allows a client to connect with a previously used channel_t
+	    virtual bool Connect(const char *address, uint16_t port, const channel_t *my_id = nullptr) = 0;
+
+		// Returns the ID that was provided to, or generated by, the call to Connect
+		// Useful to persist connection identity
+	    virtual channel_t GetID() const = 0;
+
+		// Disconnects from the server, if connected
+    	virtual void Disconnect() = 0;
+
+		// Returns the state of connection
+    	virtual bool IsConnected() const = 0;
+
+		// Sends a packet.
+		// NOTE: once a packet has been sent, it should not be modified
+	    virtual bool SendPacket(IPacket* packet) = 0;
+
+		// Registers an incoming packet handling callback with the client.
+		// When a packet with the given id arrives, this callback
+		// will be executed.
+    	virtual void RegisterPacketHandler(FOURCHARCODE id, PACKET_HANDLER handler) = 0;
+
+		// Registers an event handling callback with the client.
+	    virtual void RegisterEventHandler(EventType ev, EVENT_HANDLER handler) = 0;
+
+		// Instantiates a new client object
+    	MQME_API static IClient* NewClient();
+
+	};
+
 };
 
-
-};

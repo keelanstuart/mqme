@@ -1,7 +1,7 @@
 /*
 	mqme Library Source File
 
-	Copyright © 2009-2021, Keelan Stuart. All rights reserved.
+	Copyright © 2009-2026, Keelan Stuart. All rights reserved.
 
 	mqme (pronounced "make me") is a Windows-only C++ API and library that facilitates easy
 	distribution of network	packets	with multiple connection end-points. One-to-many is just
@@ -41,46 +41,61 @@ using namespace mqme;
 struct SPacketHeader
 {
 	FOURCHARCODE m_ID;
-	GUID m_Sender;
-	GUID m_Context;
+	uint32_t m_HeaderLength;
 	uint32_t m_DataLength;
+	channel_t m_Sender;
+	channel_t m_Context;
+	uint32_t m_Flags;
+
+	inline void ToNetwork()
+	{
+		m_ID = htonl(m_ID);
+		m_HeaderLength = htonl(m_HeaderLength);
+		m_DataLength = htonl(m_DataLength);
+		m_Flags = htonl(m_Flags);
+	}
+
+	inline void ToHost()
+	{
+		m_ID = ntohl(m_ID);
+		m_HeaderLength = ntohl(m_HeaderLength);
+		m_DataLength = ntohl(m_DataLength);
+		m_Flags = ntohl(m_Flags);
+	}
 };
 
 #pragma pack(pop)
 
 
-class CPacket : public ICorePacket
+class CPacket : public IPacket
 {
 
 public:
 
-	CPacket(uint32_t initial_size);
+	CPacket(size_t initial_size);
 	virtual ~CPacket();
 
 	virtual void Release();
 
-	virtual void SetData(FOURCHARCODE id, uint32_t datalen, const BYTE *data);
+	virtual void SetData(FOURCHARCODE id, size_t datalen, const void *data);
 
-	virtual void SetContext(GUID context);
+	virtual void SetContext(channel_t context);
 
-	virtual GUID GetContext();
+	virtual channel_t GetContext() const;
 
-	virtual void SetSender(GUID id);
+	void SetSender(channel_t id);
 
-	virtual GUID GetSender();
+	virtual channel_t GetSender() const;
 
-	virtual FOURCHARCODE GetID();
+	virtual FOURCHARCODE GetID() const;
 
-	virtual uint32_t GetDataLength();
+	virtual size_t GetDataLength() const;
 
-	virtual BYTE *GetData();
+	virtual const uint8_t *GetData() const;
 
-	SPacketHeader *GetHeader();
+	const SPacketHeader *GetHeader() const;
 
-	uint32_t GetHeaderLength();
-
-	void SetUserData(void *user);
-	void *GetUserData();
+	size_t GetFrameLength() const;
 
 	void IncRef();
 	void DecRef();
@@ -91,8 +106,6 @@ protected:
 
 	BYTE *m_Data;
 	size_t m_AllocatedDataSize;
-
-	void *m_UserData;
 
 	uint32_t m_RefCt;
 };

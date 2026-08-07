@@ -29,7 +29,8 @@ protected:
 protected:
 	HICON m_hIcon;
 
-	mqme::ICoreClient *m_pClient;
+	mqme::channel_t m_Me;
+	mqme::IClient *m_pClient;
     CRITICAL_SECTION m_csLog;
 
 	CEdit m_edAddr;
@@ -38,8 +39,8 @@ protected:
 	CEdit m_edInput;
 	CButton m_btnSend;
 
-	static bool HandlePacket(mqme::ICoreClient *client, mqme::ICorePacket *packet, LPVOID userdata);
-	static bool HandleEvent(mqme::ICoreClient *client, mqme::ICoreClient::EEventType ev, LPVOID userdata);
+	static bool HandlePacket(mqme::IClient *client, mqme::IPacket *packet, LPVOID userdata);
+	static bool HandleEvent(mqme::IClient *client, mqme::IClient::EventType ev, LPVOID userdata);
 
 	// Generated message map functions
 	virtual BOOL OnInitDialog();
@@ -51,4 +52,6 @@ public:
 	virtual void OnOK();
 	virtual void OnCancel();
 	afx_msg void OnBnClickedSend();
+	afx_msg LRESULT OnConnected(WPARAM wparam, LPARAM lparam);
+	afx_msg LRESULT OnDisconnected(WPARAM wparam, LPARAM lparam);
 };

@@ -1,7 +1,7 @@
 /*
 	mqme Library Source File
 
-	Copyright © 2009-2026, Keelan Stuart. All rights reserved.
+	Copyright Â© 2009-2026, Keelan Stuart. All rights reserved.
 
 	mqme (pronounced "make me") is a Windows-only C++ API and library that facilitates easy
 	distribution of network	packets	with multiple connection end-points. One-to-many is just
@@ -30,64 +30,44 @@
 	See <http://www.gnu.org/licenses/>.
 */
 
-#include "stdafx.h"
+#pragma once
 
-#include "PacketQueue.h"
+#include <cstddef>
+#include <cstdint>
 
-CPacketQueue::CPacketQueue(size_t initial_packet_count, size_t initial_packet_size)
-{
-	m_DefaultPacketSize = initial_packet_size;
+#if defined(_WIN32)
 
-	while (initial_packet_count)
-	{
-		CPacket *packet = new CPacket(m_DefaultPacketSize);
-		m_Queue.push(packet);
+#define NOMINMAX
 
-		initial_packet_count--;
-	}
-}
+#include <winsock2.h>
+#include <ws2tcpip.h>
+using socket_t = SOCKET;
+using socket_length_t = int;
+using pollfd_t = WSAPOLLFD;
+constexpr socket_t invalid_socket = INVALID_SOCKET;
 
+#else
 
-CPacketQueue::~CPacketQueue()
-{
-	// delete all packets
-	while (!m_Queue.empty())
-	{
-		CPacket *packet = m_Queue.front();
-		delete packet;
-		m_Queue.pop();
-	}
-}
+#include <arpa/inet.h>
+#include <cerrno>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <poll.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <unistd.h>
+using socket_t = int;
+using socket_length_t = socklen_t;
+using pollfd_t = pollfd;
+constexpr socket_t invalid_socket = -1;
 
+#endif
 
-CPacket* CPacketQueue::Deque(bool create_if_empty)
-{
-	std::lock_guard<std::mutex> lock(m_Lock);
-
-	// if the queue isn't empty, pop the front and return it
-	if (!m_Queue.empty())
-	{
-		CPacket *ret = m_Queue.front();
-		m_Queue.pop();
-		return ret;
-	}
-
-	// the queue was empty... so either make a new packet and return it or return a nullptr
-	return (create_if_empty ? new CPacket(m_DefaultPacketSize) : nullptr);
-}
-
-
-void CPacketQueue::Enque(CPacket *packet)
-{
-    std::lock_guard<std::mutex> lock(m_Lock);
-
-	m_Queue.push(packet);
-}
-
-
-bool CPacketQueue::Empty()
-{
-    std::lock_guard<std::mutex> lock(m_Lock);
-	
-	return m_Queue.empty();
-}
+bool socket_platform_initialize();
+void socket_platform_close();
+void close_socket(socket_t socket);
+void shutdown_socket(socket_t socket);
+bool send_all(socket_t socket, const void* data, size_t size);
+bool recv_all(socket_t socket, void* data, size_t size);
+int poll_descriptors(pollfd_t* descriptors, size_t count, int timeout_ms);
+size_t data_available(socket_t socket, bool& error);

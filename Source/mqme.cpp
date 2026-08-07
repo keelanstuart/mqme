@@ -1,7 +1,7 @@
 /*
 	mqme Library Source File
 
-	Copyright © 2009-2021, Keelan Stuart. All rights reserved.
+	Copyright © 2009-2026, Keelan Stuart. All rights reserved.
 
 	mqme (pronounced "make me") is a Windows-only C++ API and library that facilitates easy
 	distribution of network	packets	with multiple connection end-points. One-to-many is just
@@ -33,88 +33,118 @@
 #include "stdafx.h"
 
 #include <mqme.h>
+#include <Pool.h>
 #include "Packet.h"
 #include "PacketQueue.h"
-#include <Pool.h>
+#include "Socket.h"
 
+#include <atomic>
+#include <mutex>
+#include <random>
 
-// Need to link with Ws2_32.lib
-#pragma comment(lib, "ws2_32.lib")
+#if defined(_WIN32)
 
+#include <objbase.h>
 
+#else
 
-using namespace mqme;
+#include <uuid/uuid.h>
 
-BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
-{
-	switch (ul_reason_for_call)
-	{
-		case DLL_PROCESS_ATTACH:
-			break;
+#endif
 
-		case DLL_THREAD_ATTACH:
-			break;
-
-		case DLL_THREAD_DETACH:
-			break;
-
-		case DLL_PROCESS_DETACH:
-			break;
-	}
-
-	return TRUE;
-}
-
-CPacketQueue *g_IdlePackets = NULL;
-pool::IThreadPool *g_ThreadPool = NULL;
+CPacketQueue* g_IdlePackets = nullptr;
+pool::IThreadPool* g_ThreadPool = nullptr;
+std::mutex g_InitMutex;
 bool g_Initialized = false;
 
-bool operator <(const GUID &a, const GUID &b) { return (memcmp(&a, &b, sizeof(GUID)) <= 0) ? true : false; }
 
-bool mqme::Initialize(UINT initial_idle_packet_count, UINT initial_packet_size, UINT threads_per_core, INT core_count_adjustment)
+bool mqme::Initialize(size_t packet_count, size_t packet_size,
+                      size_t threads_per_core, int core_adjustment)
 {
-	if (g_Initialized)
+    std::lock_guard<std::mutex> lock(g_InitMutex);
+
+    if (g_Initialized)
 		return true;
 
-	WSADATA wsaData;
-    if (0 != WSAStartup(MAKEWORD(2, 2), &wsaData))
-        return false;
+    if (!socket_platform_initialize())
+		return false;
 
-	g_IdlePackets = new CPacketQueue(initial_idle_packet_count, initial_packet_size);
-	g_ThreadPool = pool::IThreadPool::Create(threads_per_core, core_count_adjustment);
+    g_IdlePackets = new CPacketQueue(packet_count, packet_size);
 
-	g_Initialized = (g_IdlePackets != nullptr) && (g_ThreadPool != nullptr);
+    g_ThreadPool = pool::IThreadPool::Create(threads_per_core, core_adjustment);
 
-	return g_Initialized;
+    g_Initialized = g_IdlePackets && g_ThreadPool;
+    if (!g_Initialized)
+    {
+        if (g_ThreadPool)
+		{
+			g_ThreadPool->Release();
+			g_ThreadPool = nullptr;
+		}
+
+        delete g_IdlePackets;
+		g_IdlePackets = nullptr;
+
+        socket_platform_close();
+    }
+
+    return g_Initialized;
 }
 
 void mqme::Close()
 {
-	if (g_Initialized)
-	{
-		WSACleanup();
-		g_Initialized = false;
-	}
+    std::lock_guard<std::mutex> lock(g_InitMutex);
 
-	if (g_IdlePackets)
-	{
-		delete g_IdlePackets;
-		g_IdlePackets = NULL;
-	}
+    if (g_ThreadPool)
+    {
+        g_ThreadPool->WaitForAllTasks(uint32_t(-1));
+        g_ThreadPool->Release();
+        g_ThreadPool = nullptr;
+    }
 
-	if (g_ThreadPool)
-	{
-		g_ThreadPool->Release();
-		g_ThreadPool = NULL;
-	}
+    delete g_IdlePackets;
+    g_IdlePackets = nullptr;
+
+    if (g_Initialized)
+		socket_platform_close();
+
+    g_Initialized = false;
 }
 
-ICorePacket *ICorePacket::NewPacket()
-{
-	CPacket *pkt = g_IdlePackets ? g_IdlePackets->Deque(true) : NULL;
 
-	GUID g = { 0 };
+mqme::channel_t mqme::GenerateChannel()
+{
+    channel_t result;
+
+#if defined(_WIN32)
+
+    CoCreateGuid(&result.m_Guid);
+
+#else
+
+    uuid_generate(result.m_GuidBytes);
+
+#endif
+
+    return result;
+}
+
+
+channel_t mqme::NullChannel()
+{
+    static channel_t null_channel = { 0 };
+
+    return null_channel;
+}
+
+
+mqme::IPacket* mqme::IPacket::NewPacket()
+{
+	CPacket *pkt = g_IdlePackets ? g_IdlePackets->Deque(true) : nullptr;
+
+	channel_t g = { 0 };
 	pkt->SetContext(g);
+	pkt->IncRef();
 
 	return pkt;
 }

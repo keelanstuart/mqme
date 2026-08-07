@@ -1,7 +1,7 @@
 /*
 	mqme Library Source File
 
-	Copyright © 2009-2021, Keelan Stuart. All rights reserved.
+	Copyright © 2009-2026, Keelan Stuart. All rights reserved.
 
 	mqme (pronounced "make me") is a Windows-only C++ API and library that facilitates easy
 	distribution of network	packets	with multiple connection end-points. One-to-many is just
@@ -40,23 +40,24 @@ using namespace mqme;
 
 extern CPacketQueue *g_IdlePackets;
 
-GUID unkguid = { 0, 0, 0,{ 0, 0, 0, 0, 0, 0, 0, 0 } };
 
-CPacket::CPacket(uint32_t initial_size)
+
+CPacket::CPacket(size_t initial_size)
 {
 	m_RefCt = 0;
-	m_Data = NULL;
-	m_UserData = NULL;
+	m_Data = nullptr;
 	m_AllocatedDataSize = initial_size;
 
-	uint32_t datalen = initial_size + sizeof(SPacketHeader);
+	size_t datalen = initial_size + sizeof(SPacketHeader);
 
-	m_Buffer = (initial_size > 0) ? (BYTE *)malloc(datalen) : NULL;
+	m_Buffer = (initial_size > 0) ? (uint8_t *)malloc(datalen) : nullptr;
 	if (m_Buffer)
 	{
-		m_Data = (BYTE *)m_Buffer + sizeof(SPacketHeader);
+		m_Data = (uint8_t *)m_Buffer + sizeof(SPacketHeader);
 
 		memset(m_Buffer, 0, sizeof(SPacketHeader));
+
+		((SPacketHeader *)m_Buffer)->m_HeaderLength = sizeof(SPacketHeader);
 	}
 }
 
@@ -67,11 +68,12 @@ CPacket::~CPacket()
 	{
 		free(m_Buffer);
 
-		m_Buffer = NULL;
-		m_Data = NULL;
+		m_Buffer = nullptr;
+		m_Data = nullptr;
 		m_AllocatedDataSize = 0;
 	}
 }
+
 
 void CPacket::Release()
 {
@@ -89,37 +91,29 @@ void CPacket::Release()
 	}
 }
 
-void CPacket::SetUserData(void *user)
-{
-	m_UserData = user;
-}
 
-void *CPacket::GetUserData()
-{
-	return m_UserData;
-}
-
-void CPacket::SetData(FOURCHARCODE id, uint32_t datalen, const BYTE *data)
+void CPacket::SetData(FOURCHARCODE id, size_t datalen, const void *data)
 {
 	if (!m_Buffer || (m_Buffer && (m_AllocatedDataSize < datalen)))
 	{
 		void *temp = realloc(m_Buffer, datalen + sizeof(SPacketHeader));
 		if (!temp)
 			throw;
+
 		m_Buffer = temp;
 		m_AllocatedDataSize = datalen;
-		m_Data = NULL;
+		m_Data = nullptr;
 	}
 
 	SPacketHeader *h = (SPacketHeader *)m_Buffer;
 	if (h)
 	{
 		h->m_ID = id;
-		h->m_DataLength = datalen;
+		h->m_DataLength = (uint32_t)datalen;
 
 		if (datalen)
 		{
-			m_Data = (BYTE *)m_Buffer + sizeof(SPacketHeader);
+			m_Data = (uint8_t *)m_Buffer + sizeof(SPacketHeader);
 		}
 	}
 
@@ -133,7 +127,7 @@ void CPacket::SetData(FOURCHARCODE id, uint32_t datalen, const BYTE *data)
 }
 
 
-void CPacket::SetContext(GUID context)
+void CPacket::SetContext(channel_t context)
 {
 	if (m_Buffer)
 	{
@@ -142,65 +136,51 @@ void CPacket::SetContext(GUID context)
 }
 
 
-GUID CPacket::GetContext()
+channel_t CPacket::GetContext() const
 {
-	return m_Buffer ? ((SPacketHeader *)m_Buffer)->m_Context : unkguid;
+	return ((SPacketHeader *)m_Buffer)->m_Context;
 }
 
 
-void CPacket::SetSender(GUID id)
+void CPacket::SetSender(channel_t id)
 {
-	if (m_Buffer)
-	{
-		((SPacketHeader *)m_Buffer)->m_Sender = id;
-	}
+	((SPacketHeader *)m_Buffer)->m_Sender = id;
 }
 
 
-GUID CPacket::GetSender()
+channel_t CPacket::GetSender() const
 {
-	if (m_Buffer)
-		return ((SPacketHeader *)m_Buffer)->m_Sender;
-
-	return unkguid;
+	return ((SPacketHeader *)m_Buffer)->m_Sender;
 }
 
 
-FOURCHARCODE CPacket::GetID()
+FOURCHARCODE CPacket::GetID() const
 {
 	return m_Buffer ? ((SPacketHeader *)m_Buffer)->m_ID : 0;
 }
 
 
-uint32_t CPacket::GetHeaderLength()
+size_t CPacket::GetDataLength() const
 {
-	uint32_t ret = 0;
-
-	SPacketHeader *h = (SPacketHeader *)m_Buffer;
-	if (h)
-	{
-		ret = (uint32_t)sizeof(SPacketHeader);
-	}
-
-	return ret;
+	return ((SPacketHeader *)m_Buffer)->m_DataLength;
 }
 
 
-uint32_t CPacket::GetDataLength()
+const uint8_t *CPacket::GetData() const
 {
-	return (m_Buffer && m_Data) ? ((SPacketHeader *)m_Buffer)->m_DataLength : 0;
+	return (((SPacketHeader *)m_Buffer)->m_DataLength > 0) ? m_Data : nullptr;
 }
 
 
-BYTE *CPacket::GetData()
-{
-	return (m_Buffer && m_Data && (((SPacketHeader *)m_Buffer)->m_DataLength > 0)) ? m_Data : NULL;
-}
-
-
-SPacketHeader *CPacket::GetHeader()
+const SPacketHeader *CPacket::GetHeader() const
 {
 	return ((SPacketHeader *)m_Buffer);
+}
+
+
+size_t CPacket::GetFrameLength() const
+{
+	return ((SPacketHeader *)m_Buffer)->m_HeaderLength + ((SPacketHeader *)m_Buffer)->m_DataLength;
 }
 
 
