@@ -1,133 +1,320 @@
 # mqme
-mqme - A network message queuing library written in C++ for Windows platforms (x86 / x64)
 
+**Lightweight, channel-based network messaging for C++**
 
-****
+mqme (pronounced **"make me"**) is a small C++ networking library for applications that need multiple systems to exchange messages without building a messaging system from scratch.
 
+Connect clients to a server, organize them into arbitrary channels, and send typed packets. mqme handles the connections, routing, threading, and packet reuse underneath.
 
-mqme simplifies client-server network communications; there are three basic interfaces to work with (and most of the time, only two in a single application): client, server, and packet.
+A client can send a packet:
 
-### Packets:
-* have a type, represented by a four-character-code
-* have a context (channel)
-* recycle themselves to reduce or eliminate runtime allocations
+* directly to the server
+* directly to another client
+* to every other client listening to a channel
 
+The same simple packet interface is used for all three.
 
-### Servers:
-* accept client connections
-* have channels
-* route received packets to clients in the context channel
-* optionally process packets themselves
-* optionally send server-origin packets to clients
-* manage channel members
+mqme is designed to stay out of the way: there is no external broker, no service to install, and no heavyweight messaging framework between your application and the network.
 
+---
 
-### Clients:
-* connect to a server
-* optionally send packets to server
-* optionally process packets
+## Why mqme?
 
+Sometimes you don't need RabbitMQ, ZeroMQ, an HTTP API, or a distributed event platform.
 
-****
+Sometimes you have ten computers that need to say:
 
+> **CALIBRATE**
 
-### Getting Started
+Or a group of clients that need to share state with one another.
 
-First, call mqme::Initialize to start things up... you have four things to decide (but there are defaults!):
-* how many packets should initially be in the packet cache
-* the initial maximum size of each packets
-* the number of threads per core to use for processing incoming packets
-* a modifier to the number of cores
+Or a server that needs to send an update to everyone interested in a particular thing.
 
+That's the problem mqme solves.
+
+```text
+                    ┌──────────┐
+               ┌────│ Client A │
+               │    └──────────┘
+               │
+┌────────┐     │    ┌──────────┐
+│ Server │─────┼────│ Client B │
+└────────┘     │    └──────────┘
+               │
+               │    ┌──────────┐
+               └────│ Client C │
+                    └──────────┘
+
+        A, B and C listen to Channel X
+
+        A sends one packet to Channel X
+                       │
+                       ▼
+              ┌────────┴────────┐
+              ▼                 ▼
+           Client B          Client C
 ```
+
+The application decides what channels mean. They might represent rooms, devices, jobs, datasets, simulations, game sessions, sensor groups, or anything else that makes sense to your software.
+
+mqme just routes the packets.
+
+---
+
+## A deliberately small model
+
+There are three primary interfaces:
+
+**Client** — connects to a server, sends packets, and receives packets and connection events.
+
+**Server** — accepts clients, manages channel membership, routes packets, and can process or originate packets itself.
+
+**Packet** — a typed block of data with a destination context.
+
+That's essentially it.
+
+Packets have a four-character type code:
+
+```cpp
+packet->SetData('DATA', size, data);
+```
+
+and a context that determines where they go:
+
+```cpp
+packet->SetContext(channel);
+```
+
+The context can identify a channel, an individual client, or the server itself.
+
+---
+
+## Channels
+
+Channels are the heart of mqme.
+
+Every client has a unique 128-bit identifier. That identifier also acts as the client's private channel, so sending directly to a client uses exactly the same mechanism as sending to a group.
+
+An application-defined channel is simply another 128-bit identifier with multiple listeners.
+
+```cpp
+server->AddListenerToChannel(channel, client);
+```
+
+Once several clients are listening:
+
+```text
+Channel X
+    ├── Client A
+    ├── Client B
+    └── Client C
+```
+
+a packet sent by Client A with Channel X as its context is automatically routed to the other listeners.
+
+There is no separate broadcast API, direct-message API, room object, or subscription object. They are all variations of the same routing model.
+
+A null context addresses the server itself.
+
+---
+
+## Designed for predictable runtime behavior
+
+mqme was written as systems code, not as a wrapper around a collection of heavyweight networking abstractions.
+
+Packets are cached and recycled. `NewPacket()` obtains a reusable packet rather than allocating a new packet object for every message. Packets have reusable internal data storage as well, reducing or eliminating heap allocation during normal message traffic.
+
+The server uses a single socket-polling thread to watch connected clients. When data becomes available, receive work is dispatched to the thread pool rather than dedicating a permanently blocked thread to every connection.
+
+The goal is straightforward:
+
+> **Do the necessary work when something happens; do very little when nothing happens.**
+
+---
+
+## Cross-platform
+
+mqme supports:
+
+* Windows
+* Linux
+* x86 and x64 builds
+* static and shared libraries
+
+The networking implementation uses the native socket facilities on each platform behind a common interface.
+
+CMake can fetch and build mqme's Pool dependency automatically.
+
+---
+
+## Getting started
+
+Initialize mqme:
+
+```cpp
 mqme::Initialize();
 ```
 
-Next, create a client or server using either mqme::ICoreClient::NewClient() or mqme::ICoreServer::NewServer() ...
+The defaults create the packet cache and worker pool for you. Their sizing can also be configured explicitly when needed.
 
+Create a server:
+
+```cpp
+mqme::IServer* server =
+    mqme::IServer::NewServer();
 ```
-mqme::ICoreServer *pServer = mqme::ICoreServer::NewServer();
+
+Register a packet handler:
+
+```cpp
+server->RegisterPacketHandler(
+    'HELO',
+    [](mqme::IServer* server,
+       mqme::IPacket* packet)
+    {
+        mqme::IPacket* response =
+            mqme::IPacket::NewPacket();
+
+        if (response)
+        {
+            response->SetContext(packet->GetSender());
+            response->SetData('HIYA', 0, nullptr);
+
+            server->SendPacket(response);
+        }
+    });
 ```
 
-With the interface returned from one of those calls, you can register event- (think connection or disconnection) and received-packet-handling callbacks.
+Register connection events:
 
+```cpp
+server->RegisterEventHandler(
+    mqme::IServer::ET_CONNECT,
+    [](mqme::IServer* server,
+       mqme::IServer::EventType event,
+       mqme::channel_t client)
+    {
+        // A client connected.
+    });
 ```
-mqme::ICoreServer *pServer = mqme::ICoreServer::NewServer();
 
-pServer->RegisterPacketHandler('HELO', [](mqme::ICoreServer *server, mqme::ICorePacket *packet, LPVOID userdata) -> bool
+Then start listening:
+
+```cpp
+if (server->StartListening(12345))
 {
-	// read authentication data from the packet... for simplicity's sake, assume the connection is valid
-
-	// handle a 'HELO' message (signs in)
-	auto pp = mqme::ICorePacket::NewPacket();
-	if (pp)
-	{
-		pp->SetContext(packet->GetSender());
-		pp->SetData('HIYA', 0, nullptr);
-		server->SendPacket(pp);
-	}
-	return true;
-}, nullptr);
-
-pServer->RegisterPacketHandler('JOIN', [](mqme::ICoreServer *server, mqme::ICorePacket *packet, LPVOID userdata) -> bool
-{
-	// handle a 'JOIN' message (joins a room)
-	server->AddListenerToChannel(packet->GetContext(), packet->GetSender());
-	return true;
-}, nullptr);
-
-pServer->RegisterPacketHandler('QUIT', [](mqme::ICoreServer *server, mqme::ICorePacket *packet, LPVOID userdata) -> bool
-{
-	// handle a 'QUIT' message (quits a room)
-	server->RemoveListenerFromChannel(packet->GetContext(), packet->GetSender());
-	return true;
-}, nullptr);
-
-pServer->RegisterEventHandler(mqme::ICoreServer::ET_CONNECT, [](mqme::ICoreServer *server, mqme::ICoreServer::EEventType ev, GUID g, LPVOID userdata) -> bool
-{
-	// do whatever you do when a new connection is made
-}, nullptr);
-
-pServer->RegisterEventHandler(mqme::ICoreServer::ET_DISCONNECT, [](mqme::ICoreServer *server, mqme::ICoreServer::EEventType ev, GUID g, LPVOID userdata) -> bool
-{
-	// do whatever you do when a connection is closed
-}, nullptr);
-```
-
-After that, call StartListening (mqme::ICoreServer) or Connect (mqme::ICoreClient) and your callbacks are active. When an event occurs or a packet is received, your code will be run.
-
-```
-if (pServer->StartListening(12345))
-{
-	// handle events until you want to shut down
-	...
-```
-
-With that, you now have a server that's capable of routing messages to channel participants.
-
-When you want to send data, call mqme::ICorePacket::NewPacket() to get a packet from the cache. On the returned interface, call mqme::ICorePacket's SetContext and SetData members, then SendPacket (on either mqme::ICoreClient or mqme::ICoreServer). When sending a packet, there is no need to Release it -- the internals will do that automatically. When receiving a packet, you must call it's Release method after you are done examining it.
-
-
-When you're all done, call Disconnect (mqme::ICoreClient) or StopListening (mqme::ICoreServer), followed by mqme::Close().
-
-```
-	...
-	pServer->StopListening();
+    // Your application runs normally while mqme
+    // handles network traffic and callbacks.
 }
-
-pServer->Release();
 ```
 
+---
 
-****
+## Sending packets
 
+Obtain a packet from the cache:
 
-### Contexts: a Primer
+```cpp
+mqme::IPacket* packet =
+    mqme::IPacket::NewPacket();
+```
 
-A "context", in the mqme world, is a GUID.
+Give it a destination and some data:
 
-When a client connects to a server, it can provide a GUID (for a persistent, existing identity) or one can be generated on the fly. Packets sent from one client directly to another client should be assigned the GUID of the recipient as the context.
+```cpp
+packet->SetContext(channel);
+packet->SetData('DATA', size, data);
+```
 
-To send a packet only to the server, the context GUID should be blank (zeroed).
+and send it:
 
-It is up to the application as to how individual clients are added to, or removed from, a channel (or even how a client obtains information about available channels or other clients), but once multiple clients belong to the same channel (just another GUID!), any packets received with the channel's context are distributed to other clients in that channel (except the sender, if they are a member).
+```cpp
+client->SendPacket(packet);
+```
+
+or:
+
+```cpp
+server->SendPacket(packet);
+```
+
+Packets handed to `SendPacket()` are released internally.
+
+Received packets remain valid while your handler is processing them and should be released according to the receive-handler ownership rules.
+
+---
+
+## Direct messages use the same mechanism
+
+Suppose Client A wants to send only to Client B.
+
+Use Client B's identifier as the packet context:
+
+```cpp
+packet->SetContext(client_b);
+```
+
+Want everyone listening to a shared channel instead?
+
+```cpp
+packet->SetContext(channel);
+```
+
+Want the packet handled only by the server?
+
+```cpp
+packet->SetContext(mqme::NullChannel());
+```
+
+Same packet. Same API. Different context.
+
+---
+
+## Building
+
+Clone mqme and configure it with CMake:
+
+```bash
+git clone https://github.com/keelanstuart/mqme.git
+cd mqme
+
+cmake -S . -B build
+cmake --build build --config Release
+```
+
+The Pool dependency is retrieved automatically during configuration.
+
+mqme follows a configuration-specific naming convention so the architecture and build type are visible directly in the filename.
+
+Examples on Windows include:
+
+```text
+mqme64.dll
+mqme64d.dll
+mqme64s.lib
+mqme64sd.lib
+```
+
+Build products are placed in the repository-level `bin` and `lib` directories rather than hidden in configuration-specific directory trees.
+
+---
+
+## What mqme is — and isn't
+
+mqme is intended for applications that need straightforward, efficient communication among a server and a collection of connected clients.
+
+It provides the transport, packet dispatch, threading, and channel routing so your application can concentrate on what the messages mean.
+
+It is **not** intended to be an enterprise message broker, persistent queue, database, RPC framework, or replacement for every networking architecture.
+
+It's the thing you reach for when your problem sounds like:
+
+> **"I have a bunch of programs that need to talk to each other."**
+
+…and you'd rather get on with writing those programs.
+
+---
+
+## License
+
+mqme is open-source software licensed under the GNU Lesser General Public License v3.0.
