@@ -160,42 +160,33 @@ The defaults create the packet cache and worker pool for you. Their sizing can a
 Create a server:
 
 ```cpp
-mqme::IServer* server =
-    mqme::IServer::NewServer();
+mqme::IServer* server = mqme::IServer::NewServer();
 ```
 
 Register a packet handler:
 
 ```cpp
-server->RegisterPacketHandler(
-    'HELO',
-    [](mqme::IServer* server,
-       mqme::IPacket* packet)
+server->RegisterPacketHandler('HELO', [](mqme::IServer* server, mqme::IPacket* packet)
+{
+    mqme::IPacket* response = mqme::IPacket::NewPacket();
+
+    if (response)
     {
-        mqme::IPacket* response =
-            mqme::IPacket::NewPacket();
+        response->SetContext(packet->GetSender());
+        response->SetData('HIYA', 0, nullptr);
 
-        if (response)
-        {
-            response->SetContext(packet->GetSender());
-            response->SetData('HIYA', 0, nullptr);
-
-            server->SendPacket(response);
-        }
-    });
+        server->SendPacket(response);
+    }
+});
 ```
 
 Register connection events:
 
 ```cpp
-server->RegisterEventHandler(
-    mqme::IServer::ET_CONNECT,
-    [](mqme::IServer* server,
-       mqme::IServer::EventType event,
-       mqme::channel_t client)
-    {
-        // A client connected.
-    });
+server->RegisterEventHandler(mqme::IServer::ET_CONNECT, [](mqme::IServer* server, mqme::IServer::EventType event, mqme::channel_t client)
+{
+    // A client connected.
+});
 ```
 
 Then start listening:
@@ -203,8 +194,7 @@ Then start listening:
 ```cpp
 if (server->StartListening(12345))
 {
-    // Your application runs normally while mqme
-    // handles network traffic and callbacks.
+    // Your application runs normally while mqme handles network traffic and callbacks.
 }
 ```
 
@@ -215,8 +205,7 @@ if (server->StartListening(12345))
 Obtain a packet from the cache:
 
 ```cpp
-mqme::IPacket* packet =
-    mqme::IPacket::NewPacket();
+mqme::IPacket* packet = mqme::IPacket::NewPacket();
 ```
 
 Give it a destination and some data:
