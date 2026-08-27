@@ -65,15 +65,15 @@ mqme just routes the packets.
 
 There are three primary interfaces:
 
-**Client** — connects to a server, sends packets, and receives packets and connection events.
+**Client**: connects to a server, sends packets, and receives packets and connection events.
 
-**Server** — accepts clients, manages channel membership, routes packets, and can process or originate packets itself.
+**Server**: accepts clients, manages channel membership, routes packets, and can process or originate packets itself.
 
-**Packet** — a typed block of data with a destination context.
+**Packet**: a typed block of data with a destination context.
 
 That's essentially it.
 
-Packets have a four-character type code:
+Packets have a four-character type code that you provide:
 
 ```cpp
 packet->SetData('DATA', size, data);
