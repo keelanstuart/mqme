@@ -14,10 +14,10 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Source\CoreClient.cpp">
+    <ClCompile Include="Source\Client.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Source\CoreServer.cpp">
+    <ClCompile Include="Source\Server.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Source\mqme.cpp">
