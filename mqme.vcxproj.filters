@@ -32,6 +32,9 @@
     <ClCompile Include="Source\stdafx.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Source\Socket.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Include\mqme.h">
@@ -44,6 +47,12 @@
       <Filter>Header Files\private</Filter>
     </ClInclude>
     <ClInclude Include="Source\stdafx.h">
+      <Filter>Header Files\private</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Protocol.h">
+      <Filter>Header Files\private</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Socket.h">
       <Filter>Header Files\private</Filter>
     </ClInclude>
   </ItemGroup>

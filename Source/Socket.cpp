@@ -30,6 +30,8 @@
 	See <http://www.gnu.org/licenses/>.
 */
 
+#include "stdafx.h"
+
 #include "Socket.h"
 #include <algorithm>
 #include <climits>
